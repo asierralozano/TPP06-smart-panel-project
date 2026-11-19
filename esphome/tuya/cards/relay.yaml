@@ -1,0 +1,46 @@
+# TPP06 · UI estilo Tuya — TARJETA DE RELÉ FÍSICO DEL PANEL (control local)
+#
+#   rele_luz: !include
+#     file: tuya/cards/relay.yaml
+#     vars: {uid: rele_luz, room: salon, relay: 1, name: "Luz pasillo"}
+#
+# `relay`: 1, 2 o 3. Usa los switches `local_relay_1..3` (en el panel los define
+# packages/local-relays-experimental.yaml; en el preview, hw/preview.yaml). No
+# pasa por Home Assistant: el toque conmuta el relé directamente y la tarjeta se
+# refresca con los cambios del switch (también los de los botones físicos) y al
+# mostrar la estancia.
+script:
+  - id: "${uid}_refresh"
+    then:
+      - lvgl.label.update:
+          id: "${uid}_sub"
+          text: !lambda 'return std::string(id(local_relay_${relay}).state ? "Encendido" : "Apagado");'
+          text_color: !lambda 'return lv_color_hex(id(local_relay_${relay}).state ? 0x9AE6C0 : 0x8A8A95);'
+      - lvgl.image.update:
+          id: "${uid}_btn"
+          src: !lambda 'return id(local_relay_${relay}).state ? id(img_on) : id(img_off);'
+
+switch:
+  - id: !extend local_relay_${relay}
+    on_turn_on:
+      - script.execute: ${uid}_refresh
+    on_turn_off:
+      - script.execute: ${uid}_refresh
+
+lvgl:
+  pages:
+    - id: !extend page_${room}
+      on_load:
+        - script.execute: ${uid}_refresh
+      widgets:
+        - obj:
+            id: "${uid}_card"
+            styles: tuya_card
+            width: 288
+            height: 96
+            on_short_click:
+              - switch.toggle: local_relay_${relay}
+            widgets:
+              - image: {id: "${uid}_btn", src: img_off, x: 14, y: 20}
+              - label: {x: 84, y: 18, text: "${name}", text_font: f17}
+              - label: {id: "${uid}_sub", x: 84, y: 46, text: "Apagado", text_font: f14, text_color: 0x8A8A95}

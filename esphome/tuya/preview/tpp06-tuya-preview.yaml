@@ -1,0 +1,141 @@
+# TPP06 · UI estilo Tuya — PREVISUALIZACIÓN con datos de demo
+#
+# Compila y ejecuta en el Mac, recorre las pantallas y guarda una captura de cada
+# una en $ESPHOME_SNAPSHOT_DIR (BMP). Ver esphome/tuya/README.md.
+#   esphome compile esphome/tuya/preview/tpp06-tuya-preview.yaml
+#   ESPHOME_SNAPSHOT_DIR=/tmp/shots \
+#     esphome/tuya/preview/.esphome/build/tpp06-tuya-preview/.pioenvs/tpp06-tuya-preview/program
+substitutions:
+  device_name: tpp06-tuya-preview
+  assets_dir: ../../tuya-assets
+  preview_api_port: "6053"
+  weather_entity: weather.demo
+  cc_on_entity: scene.demo_todo_encendido
+  cc_off_entity: scene.demo_todo_apagado
+
+packages:
+  hw: !include ../hw/preview.yaml
+  core: !include ../core.yaml
+  # Estancia 1 (como tuya_devices_build del clon C)
+  salon: !include {file: ../room.yaml, vars: {room: salon, title: "Salón"}}
+  mesa: !include {file: ../cards/light.yaml, vars: {uid: mesa, room: salon, entity: light.mesa, name: "Mesa"}}
+  techo: !include {file: ../cards/switch.yaml, vars: {uid: techo, room: salon, entity: switch.techo, name: "Techo"}}
+  enchufe: !include {file: ../cards/switch.yaml, vars: {uid: enchufe, room: salon, entity: switch.enchufe, name: "Enchufe"}}
+  # Estancia 2 (como tuya_devices_mix_build)
+  cocina: !include {file: ../room.yaml, vars: {room: cocina, title: "Cocina"}}
+  clima: !include
+    file: ../cards/sensor_th.yaml
+    vars: {uid: clima, room: cocina, name: "Clima", temp_entity: sensor.demo_t, hum_entity: sensor.demo_h}
+  lampara: !include {file: ../cards/light.yaml, vars: {uid: lampara, room: cocina, entity: light.lampara, name: "Lámpara"}}
+  cafetera: !include {file: ../cards/switch.yaml, vars: {uid: cafetera, room: cocina, entity: switch.cafetera, name: "Cafetera"}}
+  # Estancia 3: persiana, termostato y multimedia
+  dormitorio: !include {file: ../room.yaml, vars: {room: dormitorio, title: "Dormitorio"}}
+  persiana: !include {file: ../cards/cover.yaml, vars: {uid: persiana, room: dormitorio, entity: cover.persiana, name: "Persiana"}}
+  termo: !include {file: ../cards/climate.yaml, vars: {uid: termo, room: dormitorio, entity: climate.dormitorio, name: "Termostato"}}
+  musica: !include {file: ../cards/media.yaml, vars: {uid: musica, room: dormitorio, entity: media_player.dormitorio, name: "Altavoz"}}
+  # Estancia 4: relés físicos del panel
+  reles: !include {file: ../room.yaml, vars: {room: reles, title: "Panel"}}
+  rele_1: !include {file: ../cards/relay.yaml, vars: {uid: rele_1, room: reles, relay: 1, name: "Luz pasillo"}}
+  rele_2: !include {file: ../cards/relay.yaml, vars: {uid: rele_2, room: reles, relay: 2, name: "Luz entrada"}}
+  rele_3: !include {file: ../cards/relay.yaml, vars: {uid: rele_3, room: reles, relay: 3, name: "Ventilador"}}
+  # Escenas (página Escenas del centro de control)
+  buenos_dias: !include
+    file: ../cards/scene.yaml
+    vars: {uid: buenos_dias, entity: scene.buenos_dias, name: "Buenos días", icon: img_menu_in_home, color: "0xF0A24F"}
+  salir: !include
+    file: ../cards/scene.yaml
+    vars: {uid: salir, entity: scene.salir, name: "Salir", icon: img_menu_leave_home, color: "0x5A8DEE"}
+  en_casa: !include
+    file: ../cards/scene.yaml
+    vars: {uid: en_casa, entity: scene.en_casa, name: "En casa", icon: img_menu_home, color: "0x57C891"}
+  noche: !include
+    file: ../cards/scene.yaml
+    vars: {uid: noche, entity: script.noche, name: "Noche", icon: img_menu_shortcut, color: "0xB06FE0"}
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - delay: 300ms
+      - script.execute: preview_demo_data
+      - script.execute: preview_shots
+
+script:
+  - id: preview_demo_data
+    then:
+      - lambda: |-
+          id(ui_weather_state).publish_state("sunny");
+          id(ui_weather_temp).publish_state(26);
+          id(mesa_state).publish_state("on");
+          id(mesa_bri).publish_state(204);
+          id(techo_state).publish_state("off");
+          id(enchufe_state).publish_state("on");
+          id(clima_temp).publish_state(22);
+          id(clima_hum).publish_state(48);
+          id(lampara_state).publish_state("on");
+          id(lampara_bri).publish_state(166);
+          id(cafetera_state).publish_state("off");
+          id(persiana_state).publish_state("open");
+          id(persiana_pos).publish_state(65);
+          id(termo_mode).publish_state("heat");
+          id(termo_target).publish_state(21);
+          id(termo_current).publish_state(19);
+          id(local_relay_1).publish_state(true);
+          id(musica_state).publish_state("playing");
+          id(musica_mtitle).publish_state("Pista demo");
+          id(musica_martist).publish_state("Artista");
+          id(musica_vol).publish_state(0.4);
+          id(musica_dur).publish_state(226);
+          id(musica_pos).publish_state(95);
+
+  # Recorre las pantallas, captura cada una y sale.
+  - id: preview_shots
+    then:
+      - delay: 700ms
+      - lvgl.page.show: page_home
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: home.bmp}
+      - lvgl.page.show: page_salon
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: devices.bmp}
+      - lvgl.page.show: page_cocina
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: devices_mix.bmp}
+      - lvgl.page.show: page_dormitorio
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: room_dormitorio.bmp}
+      - lvgl.page.show: page_reles
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: room_reles.bmp}
+      - lvgl.page.show: page_persiana_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: cover_detail.bmp}
+      - lvgl.page.show: page_termo_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: thermostat_detail.bmp}
+      - lvgl.page.show: page_musica_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: media_detail.bmp}
+      - lvgl.page.show: page_mesa_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: light_detail.bmp}
+      - lvgl.page.show: page_control
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: control_center.bmp}
+      - lvgl.page.show: page_settings
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: settings.bmp}
+      - lvgl.page.show: page_brightness
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: brightness.bmp}
+      - lvgl.page.show: page_restart
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: restart.bmp}
+      - lvgl.page.show: page_scenes
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: scenes.bmp}
+      - lvgl.page.show: page_saver
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: screensaver.bmp}
+      - delay: 300ms
+      - lambda: exit(0);

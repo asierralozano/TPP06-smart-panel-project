@@ -1,0 +1,59 @@
+# TPP06 · UI estilo Tuya — CAPA HW DE PREVISUALIZACIÓN (Mac/Linux, sin panel)
+#
+# Sustituye los drivers del panel por una pantalla SDL sin ventana (headless) que
+# guarda capturas BMP con `snapshot.take`. Implementa los mismos contratos que
+# hw/tpp06.yaml para que core.yaml y las tarjetas compilen sin cambios.
+# Requiere SDL2 (macOS: `brew install sdl2`).
+esphome:
+  name: ${device_name}
+
+host:
+
+logger:
+  level: INFO
+
+# Necesario para las plataformas `homeassistant` (no se conecta ningún HA).
+api:
+  port: ${preview_api_port}
+  reboot_timeout: 0s
+
+time:
+  - platform: host
+    id: ha_time
+
+display:
+  - platform: sdl
+    id: tpp06_display
+    headless: true
+    dimensions:
+      width: 320
+      height: 480
+    auto_clear_enabled: false
+    update_interval: never
+
+lvgl:
+  id: mobile_ui
+  displays: tpp06_display
+  buffer_size: 100%
+
+globals:
+  - {id: ui_wifi_ok, type: int, restore_value: false, initial_value: "1"}
+
+switch:
+  - platform: template
+    id: touch_beep
+    name: "Bip al tocar"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  # Relés físicos simulados (en el panel: packages/local-relays-experimental.yaml).
+  - {platform: template, id: local_relay_1, name: "Relé 1", optimistic: true}
+  - {platform: template, id: local_relay_2, name: "Relé 2", optimistic: true}
+  - {platform: template, id: local_relay_3, name: "Relé 3", optimistic: true}
+
+script:
+  - id: ui_hw_apply_brightness
+    then:
+      - logger.log: {format: "preview: brillo %d%%", args: [id(mobile_brightness)]}
+  - id: ui_hw_restart
+    then:
+      - logger.log: "preview: reinicio solicitado"

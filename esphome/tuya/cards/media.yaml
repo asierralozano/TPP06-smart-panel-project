@@ -1,0 +1,297 @@
+# TPP06 · UI estilo Tuya — TARJETA MULTIMEDIA (media_player de HA) + detalle
+#
+#   altavoz: !include
+#     file: tuya/cards/media.yaml
+#     vars: {uid: altavoz, room: salon, entity: media_player.salon, name: "Salón"}
+#
+# Botón redondo = play/pausa · toque en el resto de la tarjeta = detalle
+# (carátula, progreso, anterior/play/siguiente y volumen).
+# Diseño 1:1 con tuya_media.c del clon C (Tuya no trae reproductor nativo: la
+# carátula es un degradado propio con una nota dibujada, sin arte con copyright).
+# `uid` debe ser único y válido como identificador (a-z, 0-9, _).
+text_sensor:
+  - platform: homeassistant
+    id: "${uid}_state"
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+  - platform: homeassistant
+    id: "${uid}_mtitle"
+    entity_id: ${entity}
+    attribute: media_title
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+  - platform: homeassistant
+    id: "${uid}_martist"
+    entity_id: ${entity}
+    attribute: media_artist
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+  # Instante al que corresponde media_position (HA no la actualiza en continuo:
+  # el progreso se extrapola con el reloj, como hace el frontend de HA).
+  - platform: homeassistant
+    id: "${uid}_posat"
+    entity_id: ${entity}
+    attribute: media_position_updated_at
+    internal: true
+    on_value:
+      - lambda: |-
+          // "AAAA-MM-DD HH:MM:SS[.ffffff]+HH:MM" -> segundos UNIX (0 = desconocido).
+          id(${uid}_pos_epoch) = 0;
+          int y, mo, d, h, mi, se;
+          if (sscanf(x.c_str(), "%d-%d-%d%*c%d:%d:%d", &y, &mo, &d, &h, &mi, &se) != 6) return;
+          y -= mo <= 2;  // días desde 1970-01-01 (days_from_civil)
+          const int era = (y >= 0 ? y : y - 399) / 400;
+          const int yoe = y - era * 400;
+          const int doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+          const int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+          int64_t t = ((int64_t) era * 146097 + doe - 719468) * 86400 + h * 3600 + mi * 60 + se;
+          const size_t tz = x.find_first_of("+-", 19);
+          if (tz != std::string::npos) {
+            int th = 0, tm = 0;
+            sscanf(x.c_str() + tz + 1, "%d:%d", &th, &tm);
+            t -= (x[tz] == '+' ? 1 : -1) * (th * 3600 + tm * 60);
+          }
+          id(${uid}_pos_epoch) = t;
+      - script.execute: ${uid}_progress
+
+sensor:
+  - platform: homeassistant
+    id: "${uid}_vol"
+    entity_id: ${entity}
+    attribute: volume_level
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+  - platform: homeassistant
+    id: "${uid}_pos"
+    entity_id: ${entity}
+    attribute: media_position
+    internal: true
+    on_value:
+      - script.execute: ${uid}_progress
+  - platform: homeassistant
+    id: "${uid}_dur"
+    entity_id: ${entity}
+    attribute: media_duration
+    internal: true
+    on_value:
+      - script.execute: ${uid}_progress
+
+globals:
+  - {id: "${uid}_pos_epoch", type: int64_t, restore_value: false, initial_value: "0"}
+
+script:
+  - id: "${uid}_refresh"
+    then:
+      - lambda: |-
+          const std::string &s = id(${uid}_state).state;
+          const bool playing = s == "playing";
+          // HA no avisa cuando un atributo desaparece: fuera de reproducción se
+          // ignoran título/artista (podrían ser de la pista anterior).
+          const bool active = playing || s == "paused" || s == "buffering";
+          std::string title = active ? id(${uid}_mtitle).state : "";
+          std::string artist = active ? id(${uid}_martist).state : "";
+          if (title.empty()) title = playing ? "Reproduciendo" : "Sin reproducción";
+          if (artist.empty())
+            artist = s == "unavailable" ? "No disponible" :
+                     (s == "off" || s == "standby") ? "Apagado" : "${name}";
+          const char *icon = playing ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY;
+          // Tarjeta: botón relleno verde si reproduce; transparente si no.
+          lv_label_set_text(id(${uid}_title), title.c_str());
+          lv_label_set_text(id(${uid}_artist), artist.c_str());
+          lv_obj_set_style_bg_opa(id(${uid}_play), playing ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+          lv_label_set_text(id(${uid}_play_ic), icon);
+          lv_obj_set_style_text_color(id(${uid}_play_ic), lv_color_hex(playing ? 0x06281C : 0xFFFFFF), 0);
+          // Detalle: botón central verde si reproduce; blanco si no.
+          lv_label_set_text(id(${uid}_dtitle), title.c_str());
+          lv_label_set_text(id(${uid}_dartist), artist.c_str());
+          lv_obj_set_style_bg_color(id(${uid}_dplay), lv_color_hex(playing ? 0x57C891 : 0xFFFFFF), 0);
+          lv_label_set_text(id(${uid}_dplay_ic), icon);
+          const float vol = id(${uid}_vol).state;
+          if (!lv_obj_has_state(id(${uid}_vslider), LV_STATE_PRESSED))
+            lv_slider_set_value(id(${uid}_vslider), std::isnan(vol) ? 0 : (int) lroundf(vol * 100.0f), LV_ANIM_OFF);
+      - script.execute: ${uid}_progress
+
+  # Barra de progreso (0-1000). Oculta si no hay duración o no hay reproducción.
+  - id: "${uid}_progress"
+    then:
+      - lambda: |-
+          const std::string &s = id(${uid}_state).state;
+          const bool active = s == "playing" || s == "paused" || s == "buffering";
+          const float dur = id(${uid}_dur).state;
+          float pos = id(${uid}_pos).state;
+          if (!active || std::isnan(dur) || dur <= 0) {
+            lv_obj_add_flag(id(${uid}_prog), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+          if (std::isnan(pos)) pos = 0;
+          if (s == "playing" && id(${uid}_pos_epoch) > 0) {
+            const auto now = id(ha_time).now();
+            if (now.is_valid()) pos += (float) (now.timestamp - id(${uid}_pos_epoch));
+          }
+          pos = std::max(0.0f, std::min(pos, dur));
+          lv_obj_remove_flag(id(${uid}_prog), LV_OBJ_FLAG_HIDDEN);
+          lv_bar_set_value(id(${uid}_prog), (int32_t) lroundf(pos * 1000.0f / dur), LV_ANIM_OFF);
+
+interval:
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(${uid}_state).state == "playing";'
+          then:
+            - script.execute: ${uid}_progress
+
+lvgl:
+  pages:
+    - id: !extend page_${room}
+      widgets:
+        - obj:
+            id: "${uid}_card"
+            styles: tuya_card
+            width: 288
+            height: 96
+            on_click:
+              - lvgl.page.show: page_${uid}_detail
+            widgets:
+              # Carátula mini (56, radio 56/6) con degradado; sin nota (< 120 px).
+              - obj:
+                  align: LEFT_MID
+                  x: 14
+                  width: 56
+                  height: 56
+                  radius: 9
+                  bg_color: 0x6F7BFF
+                  bg_grad_color: 0xB06FE0
+                  bg_grad_dir: VER
+                  bg_opa: COVER
+                  clickable: false
+              # Una sola línea con "…" (DOT necesita alto fijo = alto de línea de la fuente).
+              - label: {id: "${uid}_title", align: LEFT_MID, x: 84, y: -12, width: 136, height: 23, long_mode: DOT, text: "Sin reproducción", text_font: f17}
+              - label: {id: "${uid}_artist", align: LEFT_MID, x: 84, y: 12, width: 136, height: 19, long_mode: DOT, text: "${name}", text_font: f14, text_color: 0x8A8A95}
+              - button:
+                  id: "${uid}_play"
+                  align: RIGHT_MID
+                  x: -14
+                  width: 52
+                  height: 52
+                  radius: 26
+                  bg_color: 0x57C891
+                  bg_opa: TRANSP
+                  on_click:
+                    - homeassistant.action: {action: media_player.media_play_pause, data: {entity_id: "${entity}"}}
+                  widgets:
+                    - label: {id: "${uid}_play_ic", align: CENTER, text: "\uF04B", text_font: montserrat_24}
+
+    # Detalle a pantalla completa (tuya_detail_media).
+    - id: "page_${uid}_detail"
+      skip: true
+      bg_color: 0x0C0C10
+      on_swipe_right:
+        - lvgl.page.show: {id: "page_${room}", animation: MOVE_RIGHT, time: 200ms}
+      widgets:
+        - button:
+            styles: tuya_back_btn
+            x: 9
+            y: 9
+            width: 48
+            height: 48
+            on_click:
+              - lvgl.page.show: page_${room}
+            widgets:
+              - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        - label: {x: 58, y: 22, text: "${name}", text_font: f20}
+        # Carátula grande (176, radio 176/6) + nota musical: cabeza + mástil.
+        - obj:
+            align: TOP_MID
+            y: 84
+            width: 176
+            height: 176
+            radius: 29
+            bg_color: 0x6F7BFF
+            bg_grad_color: 0xB06FE0
+            bg_grad_dir: VER
+            bg_opa: COVER
+            clickable: false
+            widgets:
+              - obj: {align: CENTER, x: -6, y: 14, width: 26, height: 20, radius: 10, bg_color: 0xFFFFFF, bg_opa: 86%, clickable: false}
+              - obj: {align: CENTER, x: 8, y: -4, width: 4, height: 44, radius: 2, bg_color: 0xFFFFFF, bg_opa: 86%, clickable: false}
+        - label: {id: "${uid}_dtitle", align: TOP_MID, y: 280, width: 300, height: 30, long_mode: DOT, text_align: CENTER, text: "Sin reproducción", text_font: f22}
+        - label: {id: "${uid}_dartist", align: TOP_MID, y: 312, width: 300, height: 22, long_mode: DOT, text_align: CENTER, text: "${name}", text_font: f16, text_color: 0x8A8A95}
+        - bar:
+            id: "${uid}_prog"
+            align: TOP_MID
+            y: 348
+            width: 272
+            height: 6
+            min_value: 0
+            max_value: 1000
+            value: 0
+            radius: 3
+            bg_color: 0x2A2A32
+            bg_opa: COVER
+            hidden: true
+            indicator: {bg_color: 0xFFFFFF, radius: 3}
+        # Transporte: anterior · play/pausa · siguiente (símbolos LVGL).
+        - button:
+            align: TOP_MID
+            x: -96
+            y: 374
+            width: 56
+            height: 56
+            radius: 28
+            on_click:
+              - homeassistant.action: {action: media_player.media_previous_track, data: {entity_id: "${entity}"}}
+            widgets:
+              - label: {align: CENTER, text: "\uF048", text_font: montserrat_16}
+        - button:
+            id: "${uid}_dplay"
+            align: TOP_MID
+            y: 366
+            width: 76
+            height: 76
+            radius: 38
+            bg_color: 0xFFFFFF
+            bg_opa: COVER
+            on_click:
+              - homeassistant.action: {action: media_player.media_play_pause, data: {entity_id: "${entity}"}}
+            widgets:
+              - label: {id: "${uid}_dplay_ic", align: CENTER, text: "\uF04B", text_font: montserrat_24, text_color: 0x06281C}
+        - button:
+            align: TOP_MID
+            x: 96
+            y: 374
+            width: 56
+            height: 56
+            radius: 28
+            on_click:
+              - homeassistant.action: {action: media_player.media_next_track, data: {entity_id: "${entity}"}}
+            widgets:
+              - label: {align: CENTER, text: "\uF051", text_font: montserrat_16}
+        # Volumen: icono + slider (0-100 -> volume_level 0..1).
+        - image: {src: img_volume, x: 24, y: 452, image_recolor: 0x8A8A95, image_recolor_opa: COVER}
+        - slider:
+            id: "${uid}_vslider"
+            x: 64
+            y: 463
+            width: 232
+            height: 6
+            min_value: 0
+            max_value: 100
+            value: 0
+            radius: 3
+            bg_color: 0x2A2A32
+            bg_opa: COVER
+            ext_click_area: 16
+            indicator: {radius: 3, bg_color: 0x57C891}
+            knob: {bg_opa: TRANSP, shadow_width: 0, pad_all: 0}
+            on_release:
+              - homeassistant.action:
+                  action: media_player.volume_set
+                  data:
+                    entity_id: "${entity}"
+                    volume_level: !lambda 'return str_sprintf("%.2f", x / 100.0f);'

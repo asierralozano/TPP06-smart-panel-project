@@ -1,0 +1,31 @@
+# TPP06 · UI estilo Tuya — PÁGINA DE ESTANCIA (wallpaper + título + tarjetas)
+#
+# Incluir una vez por estancia, ANTES de sus tarjetas:
+#   salon: !include {file: tuya/room.yaml, vars: {room: salon, title: "Salón"}}
+# Las tarjetas (cards/*.yaml con `room: salon`) se apilan en orden de inclusión.
+# Deslizar izquierda/derecha cambia de estancia; deslizar abajo abre el centro
+# de control.
+lvgl:
+  pages:
+    - id: "page_${room}"
+      bg_color: 0x000000
+      bg_image_src: img_wallpaper
+      scrollable: true
+      scroll_dir: VER
+      scrollbar_mode: ACTIVE
+      layout:
+        type: flex
+        flex_flow: COLUMN
+        pad_row: 12
+      pad_top: 22
+      pad_left: 16
+      pad_right: 16
+      pad_bottom: 16
+      on_swipe_left:
+        - lvgl.page.next: {animation: MOVE_LEFT, time: 250ms}
+      on_swipe_right:
+        - lvgl.page.previous: {animation: MOVE_RIGHT, time: 250ms}
+      on_swipe_down:
+        - script.execute: ui_open_control
+      widgets:
+        - label: {text: "${title}", text_font: f26, pad_left: 4}

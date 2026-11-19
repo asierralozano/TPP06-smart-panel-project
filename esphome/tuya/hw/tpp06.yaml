@@ -1,0 +1,216 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TPP06 · UI estilo Tuya — CAPA HW DEL PANEL (Linux Anyka ARMv5, no ESP32)
+#
+# Drivers y servicios de la base de este repositorio (tpp06-lvgl-modern.yaml),
+# sin su interfaz: framebuffer, táctil, retroiluminación, pitido, API cifrada,
+# OTA, hora de HA y reposo de pantalla. Implementa los contratos de core.yaml:
+#   lvgl `mobile_ui`, display `tpp06_display`, time `ha_time`, switch `touch_beep`,
+#   scripts `ui_hw_apply_brightness` / `ui_hw_restart`, global `ui_wifi_ok`.
+#
+# Substituciones necesarias: device_name, friendly_name, device_address,
+# api_encryption_key, network_interface.
+# ─────────────────────────────────────────────────────────────────────────────
+esphome:
+  name: "${device_name}"
+  friendly_name: "${friendly_name}"
+  on_boot:
+    priority: -100
+    then:
+      - lambda: id(panel_backlight).set_percent(id(mobile_brightness));
+      - script.execute: tpp06_refresh_menu
+  project:
+    name: asierralozano.tpp06-tuya-ui
+    version: "0.1.0"
+  build_flags:
+    - -static
+    # Sin símbolos de depuración: el volumen /data del panel es pequeño.
+    - -Wl,--strip-all
+    - -pthread
+    - -fno-threadsafe-statics
+    - -Wl,-u,pthread_mutex_lock
+    - -Wl,-u,pthread_mutex_init
+    - -Wl,-u,pthread_mutex_trylock
+    - -Wl,-u,pthread_mutex_unlock
+    - -Wl,-u,pthread_mutex_destroy
+    - -Wl,-u,pthread_self
+
+host:
+  use_address: "${device_address}"
+  network_interface: "${network_interface}"
+  # Compilador elegido automáticamente: Zig en HA ARM64, Bootlin GCC en x86-64.
+  cross_compile: {}
+
+tpp06_compat:
+
+mdns:
+  disabled: false
+tpp06_mdns:
+  network_interface: "${network_interface}"
+
+logger:
+  level: INFO
+
+# Hora de HA por la API cifrada (sin Tuya ni NTP). Tras un arranque en frío
+# puede no ser válida hasta que HA conecte: el reloj muestra --:--.
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time_sync:
+      - lambda: id(ui_last_minute) = -1;
+      - script.execute: ui_refresh_clock
+
+api:
+  reboot_timeout: 0s
+  encryption:
+    key: "${api_encryption_key}"
+  on_client_connected:
+    - script.execute: ui_refresh_ha
+  on_client_disconnected:
+    - script.execute: ui_refresh_ha
+
+ota:
+  - platform: esphome
+    encryption:
+
+# Editor Wi-Fi del supervisor (requerido por packages/driver-diagnostics.yaml).
+# Sin el servicio Linux opcional queda en solo lectura.
+tpp06_wifi:
+  id: panel_wifi_editor
+
+tpp06_buzzer:
+  id: panel_buzzer
+
+tpp06_backlight:
+  id: panel_backlight
+  device: backlight
+
+switch:
+  - platform: template
+    id: touch_beep
+    name: "Bip al tocar"
+    entity_category: config
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: return id(panel_buzzer).enabled();
+    turn_on_action:
+      - lambda: id(panel_buzzer).set_enabled(true);
+      - script.execute: tpp06_refresh_menu
+    turn_off_action:
+      - lambda: id(panel_buzzer).set_enabled(false);
+      - script.execute: tpp06_refresh_menu
+
+# Reinicios: categoría config para que no aparezcan en dashboards automáticos.
+button:
+  - platform: tpp06_system
+    id: panel_restart
+    name: "Reiniciar ESPHome"
+    entity_category: config
+    mode: application
+  - platform: tpp06_system
+    id: panel_device_restart
+    name: "Reiniciar el panel (Linux)"
+    entity_category: config
+    mode: device
+    icon: mdi:power-cycle
+
+text_sensor:
+  - platform: tpp06_system
+    id: panel_storage
+    name: "Almacenamiento disponible y total"
+    update_interval: 60s
+  - platform: version
+    id: panel_version
+    name: "Versión ESPHome"
+    hide_timestamp: true
+    hide_hash: true
+    entity_category: diagnostic
+
+sensor:
+  - platform: uptime
+    id: panel_uptime
+    name: "Tiempo en marcha"
+    entity_category: diagnostic
+    update_interval: 60s
+
+display:
+  - platform: fbdev
+    id: tpp06_display
+    device: /dev/fb0
+    pixel_format: RGB565  # Verificado por scanout; los metadatos dicen BGR565.
+    dimensions:
+      width: 320
+      height: 480
+    auto_clear_enabled: false
+    update_interval: never
+
+touchscreen:
+  - platform: evdev
+    id: tpp06_touch
+    display: tpp06_display
+    device: /dev/input/event1
+    update_interval: 20ms
+    on_touch:
+      - lambda: id(panel_buzzer).click();
+    calibration:
+      x_min: 0
+      x_max: 320
+      y_min: 0
+      y_max: 480
+
+globals:
+  - {id: ui_wifi_ok, type: int, restore_value: false, initial_value: "-1"}
+
+interval:
+  # Enlace Wi-Fi del driver Linux (no prueba Internet ni HA).
+  - interval: 15s
+    then:
+      - lambda: |-
+          FILE *file = fopen("/sys/class/net/${network_interface}/carrier", "r");
+          int value = -1;
+          if (file != nullptr) {
+            const int c = fgetc(file);
+            value = c == '1' ? 1 : c == '0' ? 0 : -1;
+            fclose(file);
+          }
+          if (value != id(ui_wifi_ok)) {
+            id(ui_wifi_ok) = value;
+            id(tpp06_refresh_menu).execute();
+          }
+
+script:
+  - id: ui_hw_apply_brightness
+    then:
+      - lambda: |-
+          if (!id(panel_backlight).set_percent(id(mobile_brightness)))
+            ESP_LOGW("tuya_ui", "No se pudo aplicar el brillo");
+  - id: ui_hw_restart
+    then:
+      - button.press: panel_restart
+
+lvgl:
+  id: mobile_ui
+  displays: tpp06_display
+  touchscreens:
+    - touchscreen_id: tpp06_touch
+  buffer_size: 25%
+  resume_on_input: true
+  # Apagado de pantalla (independiente del salvapantallas de core.yaml).
+  on_idle:
+    - timeout: !lambda |-
+        static const uint32_t delays[] = {86400000, 30000, 60000, 120000, 300000};
+        const int c = id(mobile_sleep_choice);
+        return delays[c >= 0 && c <= 4 ? c : 0];
+      then:
+        - if:
+            condition:
+              lambda: return id(mobile_sleep_choice) > 0 && id(mobile_sleep_choice) <= 4 && id(panel_backlight).available();
+            then:
+              - lvgl.pause:
+  on_pause:
+    - lambda: |-
+        if (!id(panel_backlight).sleep()) id(mobile_ui).set_paused(false, false);
+  on_resume:
+    - lambda: id(panel_backlight).wake();
+    # El toque que despierta no debe accionar nada debajo.
+    - script.execute: ui_wake_guard
+    - lambda: id(ui_last_minute) = -1;
+    - script.execute: ui_refresh_clock

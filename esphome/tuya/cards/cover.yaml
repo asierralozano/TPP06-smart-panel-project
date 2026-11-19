@@ -1,0 +1,142 @@
+# TPP06 · UI estilo Tuya — TARJETA DE PERSIANA / COVER (+ detalle abrir/parar/cerrar)
+#
+#   persiana: !include
+#     file: tuya/cards/cover.yaml
+#     vars: {uid: persiana, room: salon, entity: cover.persiana, name: "Persiana"}
+#
+# Toque (corto o largo) = detalle: una persiana no es binaria. El detalle es 1:1
+# con tuya_detail_cover del clon C: posición grande + estado + Abrir/Parar/Cerrar.
+# La posición sale del atributo `current_position` de HA (0 = cerrada, 100 =
+# abierta); si la entidad no lo tiene, se muestra solo el estado.
+# `uid` debe ser único y válido como identificador (a-z, 0-9, _).
+text_sensor:
+  - platform: homeassistant
+    id: "${uid}_state"
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+
+sensor:
+  - platform: homeassistant
+    id: "${uid}_pos"
+    entity_id: ${entity}
+    attribute: current_position
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+
+script:
+  - id: "${uid}_refresh"
+    then:
+      - lambda: |-
+          const std::string &s = id(${uid}_state).state;
+          const bool known = s == "open" || s == "closed" || s == "opening" || s == "closing";
+          const float raw = id(${uid}_pos).state;
+          const bool has_pos = known && !std::isnan(raw);
+          const int pos = has_pos ? std::max(0, std::min(100, (int) lroundf(raw))) : 0;
+          const bool active = s == "open" || s == "opening";
+          const char *txt = s == "open" ? "Abierta" : s == "closed" ? "Cerrada" :
+                            s == "opening" ? "Abriendo…" : s == "closing" ? "Cerrando…" :
+                            s.empty() ? "--" : "No disponible";
+          const int bar = has_pos ? pos : (active ? 100 : 0);
+          const auto green = lv_color_hex(0x9AE6C0), grey = lv_color_hex(0x8A8A95);
+          // Tarjeta
+          if (s == "open" && has_pos)
+            lv_label_set_text(id(${uid}_sub), str_sprintf("Abierta %d%%", pos).c_str());
+          else
+            lv_label_set_text(id(${uid}_sub), txt);
+          lv_obj_set_style_text_color(id(${uid}_sub), active ? green : grey, 0);
+          lv_bar_set_value(id(${uid}_bar), bar, LV_ANIM_OFF);
+          lv_obj_set_style_bg_opa(id(${uid}_bar), bar > 0 ? LV_OPA_COVER : LV_OPA_40, 0);
+          // Detalle (f48 solo tiene dígitos, '-' y '%')
+          lv_label_set_text(id(${uid}_dpos), has_pos ? str_sprintf("%d%%", pos).c_str() : "--");
+          lv_label_set_text(id(${uid}_dstate), txt);
+      - lvgl.image.update:
+          id: "${uid}_btn"
+          src: !lambda |-
+            const std::string &s = id(${uid}_state).state;
+            return s == "open" || s == "opening" ? id(img_on) : id(img_off);
+
+lvgl:
+  pages:
+    - id: !extend page_${room}
+      widgets:
+        - obj:
+            id: "${uid}_card"
+            styles: tuya_card
+            width: 288
+            height: 96
+            on_click:
+              - lvgl.page.show: page_${uid}_detail
+            widgets:
+              - image: {id: "${uid}_btn", src: img_off, x: 14, y: 20}
+              - label: {x: 84, y: 18, text: "${name}", text_font: f17}
+              - label: {id: "${uid}_sub", x: 84, y: 46, text: "--", text_font: f14, text_color: 0x8A8A95}
+              - bar:
+                  id: "${uid}_bar"
+                  x: 84
+                  y: 72
+                  width: 188
+                  height: 8
+                  min_value: 0
+                  max_value: 100
+                  value: 0
+                  radius: 4
+                  bg_color: 0x33333A
+                  bg_opa: COVER
+                  indicator: {bg_color: 0x57C891, radius: 4}
+
+    # Detalle (tuya_detail_cover): posición grande + estado + abrir/parar/cerrar.
+    - id: "page_${uid}_detail"
+      skip: true
+      bg_color: 0x0C0C10
+      on_swipe_right:
+        - lvgl.page.show: {id: "page_${room}", animation: MOVE_RIGHT, time: 200ms}
+      widgets:
+        - button:
+            styles: tuya_back_btn
+            x: 9
+            y: 9
+            width: 48
+            height: 48
+            on_click:
+              - lvgl.page.show: page_${room}
+            widgets:
+              - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        - label: {x: 58, y: 22, text: "${name}", text_font: f20}
+        - label: {id: "${uid}_dpos", align: TOP_MID, y: 86, text: "--", text_font: f48}
+        - label: {id: "${uid}_dstate", align: TOP_MID, y: 150, text: "--", text_font: f15, text_color: 0x8A8A95}
+        - obj:
+            styles: tuya_dark_btn
+            align: TOP_MID
+            y: 190
+            width: 240
+            height: 68
+            pressed: {bg_color: 0x2A2A2E}
+            on_click:
+              - homeassistant.action: {action: cover.open_cover, data: {entity_id: "${entity}"}}
+            widgets:
+              - label: {align: CENTER, text: "Abrir", text_font: f20, text_color: 0x6F7BFF}
+        - obj:
+            styles: tuya_dark_btn
+            align: TOP_MID
+            y: 268
+            width: 240
+            height: 68
+            pressed: {bg_color: 0x2A2A2E}
+            on_click:
+              - homeassistant.action: {action: cover.stop_cover, data: {entity_id: "${entity}"}}
+            widgets:
+              - label: {align: CENTER, text: "Parar", text_font: f20, text_color: 0xF0B24F}
+        - obj:
+            styles: tuya_dark_btn
+            align: TOP_MID
+            y: 346
+            width: 240
+            height: 68
+            pressed: {bg_color: 0x2A2A2E}
+            on_click:
+              - homeassistant.action: {action: cover.close_cover, data: {entity_id: "${entity}"}}
+            widgets:
+              - label: {align: CENTER, text: "Cerrar", text_font: f20, text_color: 0x57C891}

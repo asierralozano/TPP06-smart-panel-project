@@ -1,0 +1,716 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TPP06 · UI estilo Tuya — NÚCLEO (tema, pantallas globales y lógica común)
+#
+# Independiente del hardware: no referencia drivers del panel. Lo que depende del
+# hardware lo implementa la capa hw/ con estos contratos:
+#   - lvgl id `mobile_ui`, display `tpp06_display`, time id `ha_time`
+#   - switch `touch_beep` (pitido al tocar)
+#   - scripts `ui_hw_apply_brightness` y `ui_hw_restart`
+#   - global `ui_wifi_ok` (-1 desconocido, 0 sin enlace, 1 enlace)
+# Coordenadas, colores y tamaños 1:1 del clon C (TPP06-custom-ui, tag c-lvgl-v1),
+# derivado del firmware Tuya 1.2.3. Assets en ${assets_dir} (privados, no en git).
+#
+# Substituciones que debe definir el fichero principal:
+#   assets_dir, weather_entity, cc_on_entity, cc_off_entity
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ───────────────────────────── Fuentes (Manrope) ─────────────────────────────
+font:
+  - {file: "gfonts://Manrope@400", id: f14, size: 14, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  - {file: "gfonts://Manrope@400", id: f15, size: 15, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  - {file: "gfonts://Manrope@400", id: f16, size: 16, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  - {file: "gfonts://Manrope@400", id: f17, size: 17, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  - {file: "gfonts://Manrope@400", id: f18, size: 18, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  - {file: "gfonts://Manrope@500", id: f19, size: 19, bpp: 4, glyphs: ["0123456789-°. "]}
+  - {file: "gfonts://Manrope@400", id: f20, size: 20, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  - {file: "gfonts://Manrope@400", id: f22, size: 22, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  - {file: "gfonts://Manrope@400", id: f26, size: 26, bpp: 4, glyphsets: [GF_Latin_Kernel, GF_Latin_Core], glyphs: ["°"]}
+  # Tamaños grandes: solo los glifos necesarios (ahorra binario/OTA).
+  - {file: "gfonts://Manrope@400", id: f36, size: 36, bpp: 4, glyphs: ["0123456789-.,°C% "]}
+  - {file: "gfonts://Manrope@400", id: f40, size: 40, bpp: 4, glyphs: ["+-"]}
+  - {file: "gfonts://Manrope@400", id: f48, size: 48, bpp: 4, glyphs: ["0123456789-%"]}
+  - {file: "gfonts://Manrope@500", id: f67, size: 67, bpp: 4, glyphs: ["0123456789-.,"]}
+  - {file: "gfonts://Manrope@500", id: f90, size: 90, bpp: 4, glyphs: ["0123456789:-"]}
+  - {file: "gfonts://Manrope@800", id: f150, size: 150, bpp: 4, glyphs: ["0123456789-"]}
+
+# ─────────────────────── Imágenes (assets reales de Tuya) ────────────────────
+image:
+  - {file: "${assets_dir}/theme/bg/00.png", id: img_wallpaper, type: RGB565, resize: 320x480}
+  - {file: "${assets_dir}/icon/on.png", id: img_on, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/off.png", id: img_off, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/left.png", id: img_left, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/right.png", id: img_right, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/network.png", id: img_network, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/brightness.png", id: img_brightness, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/display.png", id: img_display, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/dev_sys.png", id: img_dev_sys, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/dev_info.png", id: img_dev_info, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/date_time.png", id: img_date_time, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/5inch_volume.png", id: img_volume, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/menu_home.png", id: img_menu_home, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/menu_leave_home.png", id: img_menu_leave_home, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/menu_in_home.png", id: img_menu_in_home, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/menu_shortcut.png", id: img_menu_shortcut, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/icon/menu_setting.png", id: img_menu_setting, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/sunny.png", id: img_w_sunny, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/sun_cloud.png", id: img_w_sun_cloud, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/cloud.png", id: img_w_cloud, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/light_rain.png", id: img_w_light_rain, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/moderate_rain.png", id: img_w_rain, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/big_rain.png", id: img_w_big_rain, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/thundershower.png", id: img_w_thunder, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/snow.png", id: img_w_snow, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/sleet.png", id: img_w_sleet, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/hailstone.png", id: img_w_hail, type: RGB565, transparency: alpha_channel}
+  - {file: "${assets_dir}/weather/36/haze.png", id: img_w_haze, type: RGB565, transparency: alpha_channel}
+
+# ───────────────────────────── Estado de la UI ───────────────────────────────
+globals:
+  # Compartidos con esphome/packages/screen-controls.yaml (mismos ids que la UI
+  # de Philiphall6): brillo 10-100 % y reposo 0=nunca 1=30s 2=1min 3=2min 4=5min.
+  - {id: mobile_brightness, type: int, restore_value: true, initial_value: "80"}
+  - {id: mobile_sleep_choice, type: int, restore_value: true, initial_value: "0"}
+  # Salvapantallas: 0=nunca 1=30s 2=1min 3=2min 4=5min.
+  - {id: ui_saver_choice, type: int, restore_value: true, initial_value: "2"}
+  # Modo noche del centro de control (brillo bajo temporal).
+  - {id: ui_night, type: bool, restore_value: false, initial_value: "false"}
+  - {id: ui_night_saved, type: int, restore_value: false, initial_value: "80"}
+  # Página a la que vuelve el centro de control.
+  - {id: ui_ret_page, type: int, restore_value: false, initial_value: "0"}
+  - {id: ui_last_minute, type: int, restore_value: false, initial_value: "-1"}
+  - {id: ui_ha_ok, type: bool, restore_value: false, initial_value: "false"}
+
+# ───────────────────────── Datos de HA comunes (tiempo) ──────────────────────
+text_sensor:
+  - platform: homeassistant
+    id: ui_weather_state
+    entity_id: "${weather_entity}"
+    internal: true
+    on_value:
+      - script.execute: ui_refresh_weather
+sensor:
+  - platform: homeassistant
+    id: ui_weather_temp
+    entity_id: "${weather_entity}"
+    attribute: temperature
+    internal: true
+    on_value:
+      - script.execute: ui_refresh_weather
+
+# ─────────────────────────────── Lógica común ────────────────────────────────
+script:
+  - id: ui_refresh_clock
+    then:
+      - lambda: |-
+          auto t = id(ha_time).now();
+          if (!t.is_valid()) {
+            lv_label_set_text(id(ui_home_clock), "--:--");
+            lv_label_set_text(id(ui_home_date), "");
+            lv_label_set_text(id(ui_saver_hh), "--");
+            lv_label_set_text(id(ui_saver_mm), "--");
+            id(ui_last_minute) = -1;
+            return;
+          }
+          const int stamp = t.hour * 60 + t.minute;
+          if (stamp == id(ui_last_minute)) return;
+          id(ui_last_minute) = stamp;
+          static const char *const days[] = {"", "dom", "lun", "mar", "mié", "jue", "vie", "sáb"};
+          static const char *const months[] = {"", "ene", "feb", "mar", "abr", "may", "jun",
+                                               "jul", "ago", "sep", "oct", "nov", "dic"};
+          char buf[24];
+          snprintf(buf, sizeof(buf), "%02d:%02d", t.hour, t.minute);
+          lv_label_set_text(id(ui_home_clock), buf);
+          snprintf(buf, sizeof(buf), "%s %d %s", days[t.day_of_week], t.day_of_month, months[t.month]);
+          lv_label_set_text(id(ui_home_date), buf);
+          snprintf(buf, sizeof(buf), "%02d", t.hour);
+          lv_label_set_text(id(ui_saver_hh), buf);
+          snprintf(buf, sizeof(buf), "%02d", t.minute);
+          lv_label_set_text(id(ui_saver_mm), buf);
+
+  - id: ui_refresh_weather
+    then:
+      - lvgl.label.update:
+          id: ui_home_temp
+          text: !lambda |-
+            const float v = id(ui_weather_temp).state;
+            if (std::isnan(v)) return std::string("--°");
+            return str_sprintf("%.0f°", v);
+      - lvgl.image.update:
+          id: ui_home_weather
+          src: !lambda |-
+            const std::string &s = id(ui_weather_state).state;
+            if (s == "sunny" || s == "clear-night") return id(img_w_sunny);
+            if (s == "partlycloudy") return id(img_w_sun_cloud);
+            if (s == "rainy") return id(img_w_rain);
+            if (s == "pouring") return id(img_w_big_rain);
+            if (s == "lightning" || s == "lightning-rainy") return id(img_w_thunder);
+            if (s == "snowy") return id(img_w_snow);
+            if (s == "snowy-rainy") return id(img_w_sleet);
+            if (s == "hail") return id(img_w_hail);
+            if (s == "fog" || s == "exceptional") return id(img_w_haze);
+            return id(img_w_cloud);
+
+  - id: ui_refresh_ha
+    then:
+      - lambda: |-
+          // "Home Assistant" conectado = cliente API de HA (no un visor de logs).
+          bool connected = false;
+          for (const auto &client : esphome::api::global_api_server->active_clients()) {
+            const char *name = client->get_name();
+            if (name != nullptr && std::string(name).find("Home Assistant") == 0) connected = true;
+          }
+          id(ui_ha_ok) = connected;
+      - script.execute: tpp06_refresh_menu
+
+  # Nombre heredado de la UI de Philiphall6: screen-controls.yaml lo invoca.
+  - id: tpp06_refresh_menu
+    then:
+      - lambda: |-
+          static const char *const choices[] = {"Nunca", "30 s", "1 min", "2 min", "5 min"};
+          auto pick = [](int c) { return choices[c >= 0 && c <= 4 ? c : 0]; };
+          const int wifi = id(ui_wifi_ok);
+          lv_label_set_text(id(ui_set_wifi_val), wifi == 1 ? "Conectado" : wifi == 0 ? "Sin enlace" : "Desconocido");
+          lv_label_set_text(id(ui_set_bri_val), str_sprintf("%d%%", id(mobile_brightness)).c_str());
+          lv_label_set_text(id(ui_set_sleep_val), pick(id(mobile_sleep_choice)));
+          lv_label_set_text(id(ui_set_saver_val), pick(id(ui_saver_choice)));
+          lv_label_set_text(id(ui_set_beep_val), id(touch_beep).state ? "Activado" : "Desactivado");
+          lv_label_set_text(id(ui_set_ha_val), id(ui_ha_ok) ? "OK" : "No");
+          lv_slider_set_value(id(ui_cc_bri), id(mobile_brightness), LV_ANIM_OFF);
+          lv_slider_set_value(id(ui_bri_slider), id(mobile_brightness), LV_ANIM_OFF);
+          lv_label_set_text(id(ui_bri_pct), str_sprintf("%d%%", id(mobile_brightness)).c_str());
+          // Tiles del centro de control con estado.
+          lv_obj_set_style_bg_color(id(ui_cc_night), lv_color_hex(id(ui_night) ? 0x1E3A30 : 0x16161C), 0);
+          lv_obj_set_style_image_recolor(id(ui_cc_night_ic), lv_color_hex(id(ui_night) ? 0x57C891 : 0xB8B8C0), 0);
+          lv_obj_set_style_bg_color(id(ui_cc_wifi), lv_color_hex(wifi == 1 ? 0x1E3A30 : 0x16161C), 0);
+          lv_obj_set_style_image_recolor(id(ui_cc_wifi_ic), lv_color_hex(wifi == 1 ? 0x57C891 : 0xB8B8C0), 0);
+
+  # Cambia el brillo guardado y lo aplica (la capa hw decide cómo).
+  - id: ui_set_brightness
+    parameters:
+      percent: int
+    then:
+      - lambda: id(mobile_brightness) = std::max(10, std::min(100, percent));
+      - script.execute: ui_hw_apply_brightness
+      - script.execute: tpp06_refresh_menu
+
+  - id: ui_open_control
+    then:
+      - lambda: id(ui_ret_page) = id(mobile_ui).get_current_page();
+      - lvgl.page.show: {id: page_control, animation: OVER_BOTTOM, time: 200ms}
+
+  - id: ui_close_control
+    then:
+      - lambda: id(mobile_ui).show_page(id(ui_ret_page), LV_SCREEN_LOAD_ANIM_MOVE_TOP, 200);
+
+  # Tras despertar la pantalla, una capa invisible se traga el primer toque
+  # para que no accione la tarjeta que haya debajo (la invoca la capa hw/).
+  - id: ui_wake_guard
+    mode: restart
+    then:
+      - lvgl.widget.show: ui_wake_shield
+      - delay: 800ms
+      - lvgl.widget.hide: ui_wake_shield
+
+interval:
+  - interval: 1s
+    then:
+      - script.execute: ui_refresh_clock
+  - interval: 10s
+    then:
+      - script.execute: ui_refresh_ha
+
+# ──────────────────────────────── Interfaz ───────────────────────────────────
+lvgl:
+  default_font: f16
+  page_wrap: false
+  bg_color: 0x000000
+  theme:
+    obj:
+      border_width: 0
+      pad_all: 0
+      scrollable: false
+    label:
+      text_color: 0xFFFFFF
+    button:
+      bg_opa: TRANSP
+      shadow_width: 0
+      border_width: 0
+      pad_all: 0
+      radius: 0
+  style_definitions:
+    - id: tuya_card            # tarjeta translúcida sobre el wallpaper
+      bg_color: 0x14141A
+      bg_opa: 73%
+      radius: 20
+      border_width: 0
+      pad_all: 0
+    - id: tuya_row             # fila de ajustes
+      bg_color: 0x14141A
+      bg_opa: 90%
+      radius: 16
+      border_width: 0
+      pad_all: 0
+    - id: tuya_dark_btn        # botón oscuro (persiana/termostato/CC)
+      bg_color: 0x1C1C1E
+      bg_opa: COVER
+      radius: 18
+      border_width: 0
+      pad_all: 0
+    - id: tuya_back_btn        # zona táctil de la flecha de volver
+      bg_opa: TRANSP
+      border_width: 0
+      shadow_width: 0
+      pad_all: 0
+  top_layer:
+    widgets:
+      - obj:
+          id: ui_wake_shield
+          x: 0
+          y: 0
+          width: 320
+          height: 480
+          bg_opa: TRANSP
+          hidden: true
+          clickable: true
+          on_release:
+            - lvgl.widget.hide: ui_wake_shield
+  # Salvapantallas por inactividad (el reposo con pantalla apagada va en hw/).
+  on_idle:
+    - timeout: !lambda |-
+        static const uint32_t delays[] = {86400000, 30000, 60000, 120000, 300000};
+        const int c = id(ui_saver_choice);
+        return delays[c >= 0 && c <= 4 ? c : 0];
+      then:
+        - if:
+            condition:
+              lambda: return id(ui_saver_choice) > 0;
+            then:
+              - if:
+                  condition:
+                    not:
+                      lvgl.page.is_showing: page_saver
+                  then:
+                    - lvgl.page.show: {id: page_saver, animation: FADE_IN, time: 300ms}
+
+  pages:
+    # ── HOME: reloj/escritorio estilo 0 de theme/desktop.lua (1:1) ──────────
+    - id: page_home
+      bg_color: 0x000000
+      bg_image_src: img_wallpaper
+      on_swipe_left:
+        - lvgl.page.next: {animation: MOVE_LEFT, time: 250ms}
+      on_swipe_down:
+        - script.execute: ui_open_control
+      widgets:
+        - image: {id: ui_home_weather, src: img_w_sunny, x: 24, y: 29}
+        - label: {id: ui_home_temp, x: 68, y: 37, text: "--°", text_font: f19}
+        - label: {id: ui_home_date, x: 30, y: 66, text: "", text_font: f16}
+        - label:
+            id: ui_home_clock
+            x: 0
+            y: 95
+            width: 320
+            text_align: CENTER
+            text_font: f90
+            text: "--:--"
+
+    # ── CENTRO DE CONTROL (desplegable desde arriba) ────────────────────────
+    - id: page_control
+      skip: true
+      bg_color: 0x08080C
+      on_load:
+        - script.execute: tpp06_refresh_menu
+      on_swipe_up:
+        - script.execute: ui_close_control
+      widgets:
+        - obj:   # tirador (tocar = cerrar)
+            align: TOP_MID
+            y: 12
+            width: 44
+            height: 5
+            radius: 3
+            bg_color: 0xFFFFFF
+            bg_opa: 35%
+            ext_click_area: 20
+            clickable: true
+            on_click:
+              - script.execute: ui_close_control
+        - slider:
+            id: ui_cc_bri
+            align: TOP_MID
+            y: 36
+            width: 288
+            height: 64
+            min_value: 10
+            max_value: 100
+            value: 80
+            radius: 24
+            bg_color: 0x16161C
+            bg_opa: COVER
+            indicator:
+              radius: 24
+              bg_color: 0x3A3A46
+            knob:
+              bg_opa: TRANSP
+              shadow_width: 0
+              pad_all: 0
+            on_release:
+              - script.execute: {id: ui_set_brightness, percent: !lambda return (int) x;}
+        - image: {src: img_brightness, x: 32, y: 47, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        # Tiles de acción rápida (2x2)
+        - obj:
+            x: 16
+            y: 120
+            width: 136
+            height: 82
+            radius: 18
+            bg_color: 0x1E3A30
+            bg_opa: COVER
+            on_click:
+              - homeassistant.action: {action: homeassistant.turn_on, data: {entity_id: "${cc_on_entity}"}}
+            widgets:
+              - image: {src: img_on, x: 16, y: 14, image_recolor: 0x57C891, image_recolor_opa: COVER}
+              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "Todo encendido", text_font: f15}
+        - obj:
+            x: 168
+            y: 120
+            width: 136
+            height: 82
+            radius: 18
+            bg_color: 0x16161C
+            bg_opa: COVER
+            on_click:
+              - homeassistant.action: {action: homeassistant.turn_on, data: {entity_id: "${cc_off_entity}"}}
+            widgets:
+              - image: {src: img_off, x: 16, y: 14, image_recolor: 0xB8B8C0, image_recolor_opa: COVER}
+              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "Todo apagado", text_font: f15}
+        - obj:
+            id: ui_cc_night
+            x: 16
+            y: 214
+            width: 136
+            height: 82
+            radius: 18
+            bg_color: 0x16161C
+            bg_opa: COVER
+            on_click:
+              - lambda: |-
+                  if (!id(ui_night)) {
+                    id(ui_night_saved) = id(mobile_brightness);
+                    id(ui_night) = true;
+                    id(ui_set_brightness).execute(10);
+                  } else {
+                    id(ui_night) = false;
+                    id(ui_set_brightness).execute(id(ui_night_saved));
+                  }
+            widgets:
+              - image: {id: ui_cc_night_ic, src: img_menu_setting, x: 16, y: 14, image_recolor: 0xB8B8C0, image_recolor_opa: COVER}
+              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "Modo noche", text_font: f15}
+        - obj:
+            id: ui_cc_wifi
+            x: 168
+            y: 214
+            width: 136
+            height: 82
+            radius: 18
+            bg_color: 0x16161C
+            bg_opa: COVER
+            on_click:
+              - lvgl.page.show: page_settings
+            widgets:
+              - image: {id: ui_cc_wifi_ic, src: img_network, x: 16, y: 14, image_recolor: 0xB8B8C0, image_recolor_opa: COVER}
+              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "WiFi", text_font: f15}
+        # Barra inferior: Ajustes | Escenas
+        - obj:
+            align: TOP_MID
+            y: 320
+            width: 288
+            height: 72
+            radius: 20
+            bg_color: 0x16161C
+            bg_opa: COVER
+            scrollbar_mode: "OFF"
+            widgets:
+              - obj:
+                  x: 0
+                  y: 0
+                  width: 143
+                  height: 72
+                  bg_opa: TRANSP
+                  scrollbar_mode: "OFF"
+                  on_click:
+                    - lvgl.page.show: page_settings
+                  widgets:
+                    - image: {src: img_menu_setting, align: LEFT_MID, x: 14, zoom: 0.75, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+                    - label: {align: LEFT_MID, x: 70, text: "Ajustes", text_font: f16}
+              - obj: {align: CENTER, width: 2, height: 40, bg_color: 0x33333A, bg_opa: COVER}
+              - obj:
+                  x: 145
+                  y: 0
+                  width: 143
+                  height: 72
+                  bg_opa: TRANSP
+                  scrollbar_mode: "OFF"
+                  on_click:
+                    - lvgl.page.show: page_scenes
+                  widgets:
+                    - image: {src: img_menu_shortcut, align: LEFT_MID, x: 2, zoom: 0.5, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+                    - label: {align: LEFT_MID, x: 52, text: "Escenas", text_font: f16}
+
+    # ── AJUSTES ─────────────────────────────────────────────────────────────
+    - id: page_settings
+      skip: true
+      bg_color: 0x0C0C10
+      scrollable: true
+      scroll_dir: VER
+      scrollbar_mode: ACTIVE
+      on_load:
+        - script.execute: tpp06_refresh_menu
+      widgets:
+        - button:
+            styles: tuya_back_btn
+            x: 9
+            y: 11
+            width: 48
+            height: 48
+            on_click:
+              - lvgl.page.show: page_home
+            widgets:
+              - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        - label: {x: 58, y: 20, text: "Ajustes", text_font: f22}
+        # 1 · WiFi
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 78
+            width: 288
+            height: 58
+            widgets:
+              - image: {src: img_network, align: LEFT_MID, x: 20}
+              - label: {align: LEFT_MID, x: 70, text: "WiFi", text_font: f17}
+              - label: {id: ui_set_wifi_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        # 2 · Brillo de pantalla
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 144
+            width: 288
+            height: 58
+            on_click:
+              - lvgl.page.show: page_brightness
+            widgets:
+              - image: {src: img_brightness, align: LEFT_MID, x: 17}
+              - label: {align: LEFT_MID, x: 70, text: "Brillo de pantalla", text_font: f17}
+              - label: {id: ui_set_bri_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        # 3 · Reposo de pantalla (pantalla apagada)
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 210
+            width: 288
+            height: 58
+            on_click:
+              - lambda: |-
+                  id(mobile_sleep_choice) = (id(mobile_sleep_choice) + 1) % 5;
+              - script.execute: tpp06_refresh_menu
+            widgets:
+              - image: {src: img_display, align: LEFT_MID, x: 20}
+              - label: {align: LEFT_MID, x: 70, text: "Apagar pantalla", text_font: f17}
+              - label: {id: ui_set_sleep_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        # 4 · Salvapantallas
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 276
+            width: 288
+            height: 58
+            on_click:
+              - lambda: |-
+                  id(ui_saver_choice) = (id(ui_saver_choice) + 1) % 5;
+              - script.execute: tpp06_refresh_menu
+            widgets:
+              - image: {src: img_date_time, align: LEFT_MID, x: 20}
+              - label: {align: LEFT_MID, x: 70, text: "Salvapantallas", text_font: f17}
+              - label: {id: ui_set_saver_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        # 5 · Sonido al tocar
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 342
+            width: 288
+            height: 58
+            on_click:
+              - switch.toggle: touch_beep
+              - script.execute: tpp06_refresh_menu
+            widgets:
+              - obj:
+                  align: LEFT_MID
+                  x: 20
+                  width: 36
+                  height: 36
+                  radius: 18
+                  bg_color: 0x57C891
+                  bg_opa: COVER
+                  widgets:
+                    - image: {src: img_volume, align: CENTER, zoom: 0.8, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+              - label: {align: LEFT_MID, x: 70, text: "Sonido", text_font: f17}
+              - label: {id: ui_set_beep_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        # 6 · Home Assistant
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 408
+            width: 288
+            height: 58
+            widgets:
+              - image: {src: img_dev_sys, align: LEFT_MID, x: 20}
+              - label: {align: LEFT_MID, x: 70, text: "Home Assistant", text_font: f17}
+              - label: {id: ui_set_ha_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        # 7 · Reiniciar panel
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 474
+            width: 288
+            height: 58
+            on_click:
+              - lvgl.page.show: page_restart
+            widgets:
+              - image: {src: img_dev_info, align: LEFT_MID, x: 20}
+              - label: {align: LEFT_MID, x: 70, text: "Reiniciar panel", text_font: f17}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        - obj: {x: 0, y: 532, width: 10, height: 16, bg_opa: TRANSP}   # margen inferior de scroll
+
+    # ── BRILLO DE PANTALLA (barra vertical estilo detalle de luz) ───────────
+    - id: page_brightness
+      skip: true
+      bg_color: 0x0C0C10
+      on_load:
+        - script.execute: tpp06_refresh_menu
+      widgets:
+        - button:
+            styles: tuya_back_btn
+            x: 9
+            y: 9
+            width: 48
+            height: 48
+            on_click:
+              - lvgl.page.show: page_settings
+            widgets:
+              - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        - label: {x: 58, y: 22, text: "Brillo de pantalla", text_font: f20}
+        - slider:
+            id: ui_bri_slider
+            x: 100
+            y: 96
+            width: 120
+            height: 320
+            min_value: 10
+            max_value: 100
+            value: 80
+            radius: 30
+            bg_color: 0x1C1C1E
+            bg_opa: COVER
+            indicator: {radius: 30, bg_color: 0xFFFFFF}
+            knob: {bg_opa: TRANSP, shadow_width: 0, pad_all: 0}
+            on_value:
+              - lvgl.label.update: {id: ui_bri_pct, text: !lambda 'return str_sprintf("%d%%", (int) x);'}
+            on_release:
+              - script.execute: {id: ui_set_brightness, percent: !lambda return (int) x;}
+        - label: {id: ui_bri_pct, x: 100, y: 114, width: 120, text_align: CENTER, text: "80%", text_font: f26, text_color: 0x6A6A72}
+
+    # ── CONFIRMAR REINICIO ──────────────────────────────────────────────────
+    - id: page_restart
+      skip: true
+      bg_color: 0x0C0C10
+      widgets:
+        - button:
+            styles: tuya_back_btn
+            x: 9
+            y: 9
+            width: 48
+            height: 48
+            on_click:
+              - lvgl.page.show: page_settings
+            widgets:
+              - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        - label: {x: 58, y: 22, text: "Reiniciar panel", text_font: f20}
+        - label:
+            align: TOP_MID
+            y: 150
+            width: 260
+            text_align: CENTER
+            long_mode: WRAP
+            text: "Se reiniciará la aplicación del panel. Tarda unos segundos y no cambia los relés."
+            text_font: f17
+            text_color: 0xB8B8C0
+        - obj:
+            styles: tuya_dark_btn
+            align: TOP_MID
+            y: 268
+            width: 240
+            height: 68
+            on_click:
+              - script.execute: ui_hw_restart
+            widgets:
+              - label: {align: CENTER, text: "Reiniciar", text_font: f20, text_color: 0xF0B24F}
+        - obj:
+            styles: tuya_dark_btn
+            align: TOP_MID
+            y: 346
+            width: 240
+            height: 68
+            on_click:
+              - lvgl.page.show: page_settings
+            widgets:
+              - label: {align: CENTER, text: "Cancelar", text_font: f20, text_color: 0x57C891}
+
+    # ── ESCENAS (las tarjetas las añade cards/scene.yaml) ───────────────────
+    - id: page_scenes
+      skip: true
+      bg_color: 0x0C0C10
+      scrollable: true
+      scroll_dir: VER
+      scrollbar_mode: ACTIVE
+      layout:
+        type: flex
+        flex_flow: ROW_WRAP
+        pad_row: 12
+        pad_column: 8
+      pad_top: 78
+      pad_left: 16
+      pad_right: 8
+      pad_bottom: 16
+      widgets:
+        - button:
+            styles: tuya_back_btn
+            ignore_layout: true
+            x: -7
+            y: -67
+            width: 48
+            height: 48
+            on_click:
+              - lvgl.page.show: page_home
+            widgets:
+              - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        - label: {ignore_layout: true, x: 42, y: -58, text: "Escenas", text_font: f22}
+
+    # ── SALVAPANTALLAS screen_saver_1 (flip-clock, 1:1) ─────────────────────
+    - id: page_saver
+      skip: true
+      bg_color: 0x000000
+      on_press:
+        - lvgl.page.show: {id: page_home, animation: FADE_IN, time: 200ms}
+      widgets:
+        - obj: {align: TOP_MID, y: 25, width: 212, height: 206, radius: 16, bg_color: 0xFFFFFF, bg_opa: 10%}
+        - label: {id: ui_saver_hh, align: TOP_MID, y: 20, width: 240, text_align: CENTER, text: "--", text_font: f150, text_opa: 80%}
+        - obj: {align: TOP_MID, y: 131, width: 212, height: 4, bg_color: 0x000000, bg_opa: COVER}
+        - obj: {align: TOP_MID, y: 247, width: 212, height: 206, radius: 16, bg_color: 0xFFFFFF, bg_opa: 10%}
+        - label: {id: ui_saver_mm, align: TOP_MID, y: 242, width: 240, text_align: CENTER, text: "--", text_font: f150, text_opa: 80%}
+        - obj: {align: TOP_MID, y: 353, width: 212, height: 4, bg_color: 0x000000, bg_opa: COVER}

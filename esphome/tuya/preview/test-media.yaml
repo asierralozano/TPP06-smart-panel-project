@@ -1,0 +1,52 @@
+# TPP06 · UI estilo Tuya — PREVISUALIZACIÓN de la tarjeta multimedia
+#
+#   ESPHOME=.venv/bin/esphome sh esphome/tuya/preview/run.sh \
+#       esphome/tuya/preview/test-media.yaml /tmp/shots-media
+# Deja media_room.png (estancia con la tarjeta) y media_detail.png (detalle).
+substitutions:
+  device_name: tpp06-test-media
+  assets_dir: ../../tuya-assets
+  preview_api_port: "6063"
+  weather_entity: weather.demo
+  cc_on_entity: scene.demo_todo_encendido
+  cc_off_entity: scene.demo_todo_apagado
+
+packages:
+  hw: !include ../hw/preview.yaml
+  core: !include ../core.yaml
+  salon: !include {file: ../room.yaml, vars: {room: salon, title: "Salón"}}
+  altavoz: !include {file: ../cards/media.yaml, vars: {uid: altavoz, room: salon, entity: media_player.salon, name: "Salón"}}
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - delay: 300ms
+      - script.execute: preview_demo_data
+      - script.execute: preview_shots
+
+script:
+  - id: preview_demo_data
+    then:
+      - lambda: |-
+          id(ui_weather_state).publish_state("sunny");
+          id(ui_weather_temp).publish_state(26);
+          id(altavoz_state).publish_state("playing");
+          id(altavoz_mtitle).publish_state("Pista demo");
+          id(altavoz_martist).publish_state("Artista");
+          id(altavoz_vol).publish_state(0.4);
+          id(altavoz_dur).publish_state(226);
+          id(altavoz_pos).publish_state(95);
+
+  # Captura la estancia y el detalle, y sale.
+  - id: preview_shots
+    then:
+      - delay: 700ms
+      - lvgl.page.show: page_salon
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: media_room.bmp}
+      - lvgl.page.show: page_altavoz_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: media_detail.bmp}
+      - delay: 300ms
+      - lambda: exit(0);

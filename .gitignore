@@ -33,3 +33,6 @@ connection.json
 commission.json
 api-key.txt
 .venv-commission/
+
+# Tuya UI: assets extraidos del firmware de Tuya (copyright de terceros, nunca a git)
+esphome/tuya-assets/

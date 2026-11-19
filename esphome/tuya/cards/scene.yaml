@@ -1,0 +1,39 @@
+# TPP06 · UI estilo Tuya — TILE DE ESCENA (pantalla Escenas del centro de control)
+#
+#   buenos_dias: !include
+#     file: tuya/cards/scene.yaml
+#     vars: {uid: buenos_dias, entity: scene.buenos_dias, name: "Buenos días",
+#            icon: img_menu_in_home, color: 0xF0A24F}
+#
+# `icon`: img_menu_in_home, img_menu_leave_home, img_menu_home o img_menu_shortcut.
+# `color`: color del círculo (hex). Toque = homeassistant.turn_on, que vale para
+# scene.* y script.*. Los tiles se colocan en rejilla de 2 columnas en orden de
+# inclusión (page_scenes es flex ROW_WRAP; geometría 1:1 de tuya_scenes.c).
+lvgl:
+  pages:
+    - id: !extend page_scenes
+      widgets:
+        - obj:
+            id: "${uid}_tile"
+            width: 140
+            height: 126
+            radius: 20
+            bg_color: 0x14141A
+            bg_opa: 86%
+            pressed:
+              opa: 60%
+            on_short_click:
+              - homeassistant.action: {action: homeassistant.turn_on, data: {entity_id: "${entity}"}}
+            widgets:
+              - obj:
+                  align: TOP_MID
+                  y: 16
+                  width: 64
+                  height: 64
+                  radius: 32
+                  bg_color: ${color}
+                  bg_opa: COVER
+                  clickable: false
+                  widgets:
+                    - image: {src: "${icon}", align: CENTER, zoom: 0.625, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+              - label: {align: BOTTOM_MID, y: -14, width: 132, text_align: CENTER, text: "${name}", text_font: f16}

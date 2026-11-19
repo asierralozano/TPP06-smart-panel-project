@@ -1,0 +1,194 @@
+# TPP06 · UI estilo Tuya — TARJETA DE TERMOSTATO (climate) + detalle (thermoregulator.lua)
+#
+#   termo: !include
+#     file: tuya/cards/climate.yaml
+#     vars: {uid: termo, room: salon, entity: climate.salon, name: "Termostato"}
+#
+# Toque = detalle: consigna grande, botones −/+ (±0,5 °C), modo y temperatura actual.
+# La consigna cambia al momento en pantalla (optimista); se envía a HA 0,6 s después
+# de la última pulsación y 4 s más tarde se vuelve a mostrar el valor real de HA.
+# En modo heat_cool (rango alto/bajo) HA no da consigna única: se muestra "--".
+# `uid` debe ser único y válido como identificador (a-z, 0-9, _).
+globals:
+  # Consigna mostrada (copia local de `temperature` que se adelanta a HA al pulsar).
+  - {id: "${uid}_sp", type: float, restore_value: false, initial_value: "NAN"}
+
+text_sensor:
+  - platform: homeassistant
+    id: "${uid}_mode"
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+
+sensor:
+  - platform: homeassistant
+    id: "${uid}_target"
+    entity_id: ${entity}
+    attribute: temperature
+    internal: true
+    on_value:
+      - lambda: |-
+          // Con pulsaciones pendientes manda el valor local; al terminar se resincroniza.
+          if (!id(${uid}_commit).is_running()) id(${uid}_sp) = x;
+      - script.execute: ${uid}_refresh
+  - platform: homeassistant
+    id: "${uid}_current"
+    entity_id: ${entity}
+    attribute: current_temperature
+    internal: true
+    on_value:
+      - script.execute: ${uid}_refresh
+
+script:
+  - id: "${uid}_refresh"
+    then:
+      - lambda: |-
+          const std::string &m = id(${uid}_mode).state;
+          bool active = true;
+          const char *mode;
+          if (m == "heat") mode = "Calefacción";
+          else if (m == "cool") mode = "Refrigeración";
+          else if (m == "heat_cool" || m == "auto") mode = "Automático";
+          else if (m == "dry") mode = "Deshumidificar";
+          else if (m == "fan_only") mode = "Ventilador";
+          else {
+            active = false;
+            mode = m == "off" ? "Apagado" : m.empty() ? "--" : "No disponible";
+          }
+          // Entero si es .0; si no, un decimal.
+          auto fmt = [](float v) -> std::string {
+            if (std::isnan(v)) return "--";
+            const float r = roundf(v * 10.0f) / 10.0f;
+            return fabsf(r - roundf(r)) < 0.05f ? str_sprintf("%.0f", r) : str_sprintf("%.1f", r);
+          };
+          const float sp = id(${uid}_sp);
+          const std::string sps = fmt(sp);
+          // Tarjeta
+          lv_image_set_src(id(${uid}_btn), (active ? id(img_on) : id(img_off))->get_lv_image_dsc());
+          lv_label_set_text(id(${uid}_sub), active && !std::isnan(sp)
+                            ? str_sprintf("%s · %s °C", mode, sps.c_str()).c_str() : mode);
+          lv_obj_set_style_text_color(id(${uid}_sub), lv_color_hex(active ? 0x9AE6C0 : 0x8A8A95), 0);
+          // Detalle: consigna + °C pegado arriba a la derecha (align_to no se recalcula solo)
+          lv_label_set_text(id(${uid}_dsp), sps.c_str());
+          lv_obj_update_layout(id(${uid}_dsp));
+          lv_obj_align_to(id(${uid}_dunit), id(${uid}_dsp), LV_ALIGN_OUT_RIGHT_TOP, 6, 14);
+          lv_label_set_text(id(${uid}_dmode), mode);
+          lv_obj_set_style_text_color(id(${uid}_dmode), lv_color_hex(active ? 0x57C891 : 0x8A8A95), 0);
+          lv_label_set_text(id(${uid}_dcur),
+                            str_sprintf("Actual: %s °C", fmt(id(${uid}_current).state).c_str()).c_str());
+
+  # −/+ : ajusta la consigna mostrada y programa el envío.
+  - id: "${uid}_step"
+    parameters:
+      delta: float
+    then:
+      - lambda: |-
+          float base = id(${uid}_sp);
+          if (std::isnan(base)) base = id(${uid}_target).state;
+          if (std::isnan(base)) return;   // sin consigna (apagado, heat_cool...)
+          id(${uid}_sp) = base + delta;
+          id(${uid}_refresh).execute();
+          id(${uid}_commit).execute();
+
+  # Envía tras 0,6 s sin pulsaciones y luego vuelve al valor que dé HA.
+  - id: "${uid}_commit"
+    mode: restart
+    then:
+      - delay: 600ms
+      - homeassistant.action:
+          action: climate.set_temperature
+          data:
+            entity_id: "${entity}"
+            temperature: !lambda 'return str_sprintf("%.1f", id(${uid}_sp));'
+      - delay: 4s
+      - lambda: id(${uid}_sp) = id(${uid}_target).state;
+      - script.execute: ${uid}_refresh
+
+lvgl:
+  pages:
+    - id: !extend page_${room}
+      widgets:
+        - obj:
+            id: "${uid}_card"
+            styles: tuya_card
+            width: 288
+            height: 96
+            on_click:
+              - lvgl.page.show: page_${uid}_detail
+            widgets:
+              - image: {id: "${uid}_btn", src: img_off, x: 14, y: 20}
+              - label: {x: 84, y: 18, text: "${name}", text_font: f17}
+              - label: {id: "${uid}_sub", x: 84, y: 46, text: "--", text_font: f14, text_color: 0x8A8A95}
+
+    # Detalle (tuya_detail_thermostat): consigna grande + °C, modo, −/+ y actual.
+    - id: "page_${uid}_detail"
+      skip: true
+      bg_color: 0x0C0C10
+      on_swipe_right:
+        - lvgl.page.show: {id: "page_${room}", animation: MOVE_RIGHT, time: 200ms}
+      widgets:
+        - button:
+            styles: tuya_back_btn
+            x: 9
+            y: 9
+            width: 48
+            height: 48
+            on_click:
+              - lvgl.page.show: page_${room}
+            widgets:
+              - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
+        - label: {x: 58, y: 22, text: "${name}", text_font: f20}
+        - label: {id: "${uid}_dsp", align: TOP_MID, x: -14, y: 112, text: "--", text_font: f67}
+        - label:
+            id: "${uid}_dunit"
+            text: "°C"
+            text_font: f20
+            text_color: 0xB8B8C0
+            align_to: {id: "${uid}_dsp", align: OUT_RIGHT_TOP, x: 6, y: 14}
+        - label:
+            id: "${uid}_dmode"
+            align: TOP_MID
+            y: 206
+            width: 320
+            text_align: CENTER
+            text: "--"
+            text_font: f20
+            text_color: 0x8A8A95
+        - obj:
+            align: TOP_MID
+            x: -93
+            y: 300
+            width: 72
+            height: 72
+            radius: 36
+            bg_color: 0x1C1C22
+            bg_opa: COVER
+            pressed: {bg_color: 0x2C2C34}
+            on_click:
+              - script.execute: {id: "${uid}_step", delta: -0.5}
+            widgets:
+              - label: {align: CENTER, text: "-", text_font: f40}
+        - obj:
+            align: TOP_MID
+            x: 93
+            y: 300
+            width: 72
+            height: 72
+            radius: 36
+            bg_color: 0x1C1C22
+            bg_opa: COVER
+            pressed: {bg_color: 0x2C2C34}
+            on_click:
+              - script.execute: {id: "${uid}_step", delta: 0.5}
+            widgets:
+              - label: {align: CENTER, text: "+", text_font: f40}
+        - label:
+            id: "${uid}_dcur"
+            align: TOP_MID
+            y: 404
+            width: 320
+            text_align: CENTER
+            text: "Actual: -- °C"
+            text_font: f15
+            text_color: 0x8A8A95

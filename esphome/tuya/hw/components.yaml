@@ -1,0 +1,23 @@
+# Drivers Linux del TPP06 (fbdev, evdev, host, tpp06_*) desde git, fijados a una
+# referencia concreta. Para producción usa un tag o un commit, no una rama.
+external_components:
+  - source:
+      type: git
+      url: ${components_url}
+      ref: ${components_ref}
+      path: esphome-components
+    refresh: 1d
+    components:
+      - evdev
+      - fbdev
+      - host
+      - md5
+      - sha256
+      - tpp06_compat
+      - tpp06_mdns
+      - tpp06_backlight
+      - tpp06_buzzer
+      - tpp06_system
+      - tpp06_wifi
+      - tpp06_health
+      - tpp06_local_relays

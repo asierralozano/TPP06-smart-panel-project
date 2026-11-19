@@ -1,0 +1,64 @@
+# TPP06 · UI estilo Tuya — PREVISUALIZACIÓN de escenas y tarjetas de relé
+#
+# Compila y ejecuta en el Mac, captura la pantalla de Escenas y una estancia con
+# los 3 relés del panel (relé 1 encendido) y sale. Ver esphome/tuya/README.md.
+#   ESPHOME=.venv/bin/esphome sh esphome/tuya/preview/run.sh \
+#       esphome/tuya/preview/test-scenes.yaml /tmp/shots
+substitutions:
+  device_name: tpp06-test-scenes
+  assets_dir: ../../tuya-assets
+  preview_api_port: "6064"
+  weather_entity: weather.demo
+  cc_on_entity: scene.demo_todo_encendido
+  cc_off_entity: scene.demo_todo_apagado
+
+packages:
+  hw: !include ../hw/preview.yaml
+  core: !include ../core.yaml
+  # Escenas (como tuya_scenes_build del clon C)
+  buenos_dias: !include
+    file: ../cards/scene.yaml
+    vars: {uid: buenos_dias, entity: scene.buenos_dias, name: "Buenos días", icon: img_menu_in_home, color: 0xF0A24F}
+  salir: !include
+    file: ../cards/scene.yaml
+    vars: {uid: salir, entity: scene.salir, name: "Salir", icon: img_menu_leave_home, color: 0x5A8DEE}
+  en_casa: !include
+    file: ../cards/scene.yaml
+    vars: {uid: en_casa, entity: scene.en_casa, name: "En casa", icon: img_menu_home, color: 0x57C891}
+  noche: !include
+    file: ../cards/scene.yaml
+    vars: {uid: noche, entity: script.noche, name: "Noche", icon: img_menu_shortcut, color: 0xB06FE0}
+  # Estancia con los 3 relés físicos del panel
+  reles: !include {file: ../room.yaml, vars: {room: reles, title: "Relés"}}
+  rele_1: !include {file: ../cards/relay.yaml, vars: {uid: rele_1, room: reles, relay: 1, name: "Luz pasillo"}}
+  rele_2: !include {file: ../cards/relay.yaml, vars: {uid: rele_2, room: reles, relay: 2, name: "Luz entrada"}}
+  rele_3: !include {file: ../cards/relay.yaml, vars: {uid: rele_3, room: reles, relay: 3, name: "Ventilador"}}
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - delay: 300ms
+      - script.execute: preview_demo_data
+      - script.execute: preview_shots
+
+script:
+  - id: preview_demo_data
+    then:
+      - lambda: |-
+          id(ui_weather_state).publish_state("sunny");
+          id(ui_weather_temp).publish_state(26);
+      - switch.turn_on: local_relay_1
+
+  # Captura las pantallas y sale.
+  - id: preview_shots
+    then:
+      - delay: 700ms
+      - lvgl.page.show: page_scenes
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: scenes.bmp}
+      - lvgl.page.show: page_reles
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: relays_room.bmp}
+      - delay: 300ms
+      - lambda: exit(0);

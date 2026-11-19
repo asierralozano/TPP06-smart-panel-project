@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TPP06 · UI estilo Tuya — FICHERO DEL PANEL (copiar a Device Builder de HA)
+#
+# Copia a /config/esphome/ de Home Assistant:
+#   tpp06-tuya.yaml (este fichero, renómbralo por panel), tuya/, packages/
+#   y tuya-assets/ (privado: sh tools/tpp06_tuya_assets.sh <tuya-fw/img>).
+# Compila en Device Builder; la primera instalación sigue docs/ (Tuya Cutter);
+# después, cada cambio va por OTA. Guía: tuya/README.md.
+#
+# Todo lo de abajo son EJEMPLOS ficticios: pon tus entidades de HA.
+# ─────────────────────────────────────────────────────────────────────────────
+substitutions:
+  device_name: "tpp06-tuya"           # único por panel, sin espacios
+  friendly_name: "Panel TPP06"
+  device_address: "${device_name}.local"   # usa la IP en la primera migración
+  api_encryption_key: !secret tpp06_api_encryption_key
+  network_interface: "wlan0"
+  assets_dir: "tuya-assets"
+  components_url: "https://github.com/asierralozano/TPP06-smart-panel-project"
+  components_ref: "tuya-ui"
+  # Entidades globales de HA
+  weather_entity: "weather.casa"
+  cc_on_entity: "scene.todo_encendido"     # tile "Todo encendido" del centro de control
+  cc_off_entity: "scene.todo_apagado"      # tile "Todo apagado"
+
+packages:
+  components: !include tuya/hw/components.yaml
+  hw: !include tuya/hw/tpp06.yaml
+  core: !include tuya/core.yaml
+  # Servicios del panel (de la base Philiphall6): relés, salud, diagnósticos,
+  # brillo/reposo desde HA.
+  relays: !include packages/local-relays-experimental.yaml
+  health: !include packages/runtime-health.yaml
+  mute: !include packages/mute-input-observation.yaml
+  diag: !include packages/driver-diagnostics.yaml
+  screen: !include packages/screen-controls.yaml
+
+  # ── Estancias y dispositivos (se muestran en este orden) ──────────────────
+  salon: !include {file: tuya/room.yaml, vars: {room: salon, title: "Salón"}}
+  salon_techo: !include
+    file: tuya/cards/light.yaml
+    vars: {uid: salon_techo, room: salon, entity: light.salon_techo, name: "Techo"}
+  salon_enchufe: !include
+    file: tuya/cards/switch.yaml
+    vars: {uid: salon_enchufe, room: salon, entity: switch.salon_enchufe, name: "Enchufe"}
+
+  cocina: !include {file: tuya/room.yaml, vars: {room: cocina, title: "Cocina"}}
+  cocina_clima: !include
+    file: tuya/cards/sensor_th.yaml
+    vars: {uid: cocina_clima, room: cocina, name: "Clima",
+           temp_entity: sensor.cocina_temperatura, hum_entity: sensor.cocina_humedad}
+  cocina_luz: !include
+    file: tuya/cards/light.yaml
+    vars: {uid: cocina_luz, room: cocina, entity: light.cocina, name: "Luz"}
+
+# Relés físicos del panel. SEGURIDAD: empieza en observación (los botones y HA
+# no conmutan nada). Tras comprobar en sitio el cableado: control_enabled: true.
+tpp06_local_relays:
+  control_enabled: false

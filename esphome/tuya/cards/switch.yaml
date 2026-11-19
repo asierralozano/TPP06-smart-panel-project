@@ -1,0 +1,40 @@
+# TPP06 · UI estilo Tuya — TARJETA DE INTERRUPTOR / ENCHUFE (entidad de HA)
+#
+#   enchufe: !include
+#     file: tuya/cards/switch.yaml
+#     vars: {uid: enchufe, room: salon, entity: switch.enchufe, name: "Enchufe"}
+#
+# Vale para cualquier entidad on/off de HA (switch, input_boolean, fan, light
+# sin brillo...). Toque = conmutar (homeassistant.toggle).
+text_sensor:
+  - platform: homeassistant
+    id: "${uid}_state"
+    entity_id: ${entity}
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: "${uid}_sub"
+          text: !lambda |-
+            if (x == "on") return std::string("Encendido");
+            if (x == "off") return std::string("Apagado");
+            return std::string(x.empty() ? "--" : "No disponible");
+          text_color: !lambda 'return lv_color_hex(x == "on" ? 0x9AE6C0 : 0x8A8A95);'
+      - lvgl.image.update:
+          id: "${uid}_btn"
+          src: !lambda 'return x == "on" ? id(img_on) : id(img_off);'
+
+lvgl:
+  pages:
+    - id: !extend page_${room}
+      widgets:
+        - obj:
+            id: "${uid}_card"
+            styles: tuya_card
+            width: 288
+            height: 96
+            on_short_click:
+              - homeassistant.action: {action: homeassistant.toggle, data: {entity_id: "${entity}"}}
+            widgets:
+              - image: {id: "${uid}_btn", src: img_off, x: 14, y: 20}
+              - label: {x: 84, y: 18, text: "${name}", text_font: f17}
+              - label: {id: "${uid}_sub", x: 84, y: 46, text: "--", text_font: f14, text_color: 0x8A8A95}
