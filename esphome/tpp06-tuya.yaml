@@ -16,6 +16,8 @@ substitutions:
   api_encryption_key: !secret tpp06_api_encryption_key
   network_interface: "wlan0"
   assets_dir: "tuya-assets"
+  tuya_dir: "tuya"
+  default_language: "0"                    # 0 = español, 1 = English (cambiable en Ajustes)
   components_url: "https://github.com/asierralozano/TPP06-smart-panel-project"
   components_ref: "tuya-ui"
   # Entidades globales de HA

@@ -10,11 +10,14 @@
 # refresca con los cambios del switch (también los de los botones físicos) y al
 # mostrar la estancia.
 script:
+  - id: !extend ui_apply_language
+    then:
+      - script.execute: ${uid}_refresh
   - id: "${uid}_refresh"
     then:
       - lvgl.label.update:
           id: "${uid}_sub"
-          text: !lambda 'return std::string(id(local_relay_${relay}).state ? "Encendido" : "Apagado");'
+          text: !lambda 'return std::string(T(id(local_relay_${relay}).state ? TR_ON_M : TR_OFF_M));'
           text_color: !lambda 'return lv_color_hex(id(local_relay_${relay}).state ? 0x9AE6C0 : 0x8A8A95);'
       - lvgl.image.update:
           id: "${uid}_btn"

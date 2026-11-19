@@ -41,6 +41,12 @@ lvgl:
             widgets:
               - label: {x: 18, y: 16, text: "${name}", text_font: f17}
               - label: {id: "${uid}_tv", x: 0, y: 60, width: 144, text_align: CENTER, text: "-- °C", text_font: f36}
-              - label: {x: 0, y: 112, width: 144, text_align: CENTER, text: "Temperatura", text_font: f15, text_color: 0x8A8A95}
+              - label: {x: 0, y: 112, width: 144, text_align: CENTER, id: "${uid}_t_temp", text: "Temperatura", text_font: f15, text_color: 0x8A8A95}
               - label: {id: "${uid}_hv", x: 144, y: 60, width: 144, text_align: CENTER, text: "-- %", text_font: f36}
-              - label: {x: 144, y: 112, width: 144, text_align: CENTER, text: "Humedad", text_font: f15, text_color: 0x8A8A95}
+              - label: {x: 144, y: 112, width: 144, text_align: CENTER, id: "${uid}_t_hum", text: "Humedad", text_font: f15, text_color: 0x8A8A95}
+
+script:
+  - id: !extend ui_apply_language
+    then:
+      - lvgl.label.update: {id: "${uid}_t_temp", text: !lambda return std::string(T(TR_TEMPERATURE));}
+      - lvgl.label.update: {id: "${uid}_t_hum", text: !lambda return std::string(T(TR_HUMIDITY));}

@@ -11,8 +11,17 @@
 # derivado del firmware Tuya 1.2.3. Assets en ${assets_dir} (privados, no en git).
 #
 # Substituciones que debe definir el fichero principal:
-#   assets_dir, weather_entity, cc_on_entity, cc_off_entity
+#   assets_dir, tuya_dir (carpeta de esta UI, para i18n.h), default_language
+#   (0=español, 1=inglés…), weather_entity, cc_on_entity, cc_off_entity
 # ─────────────────────────────────────────────────────────────────────────────
+
+esphome:
+  includes:
+    - ${tuya_dir}/i18n.h        # textos de la UI (añadir idiomas ahí)
+  on_boot:
+    priority: -100
+    then:
+      - script.execute: ui_apply_language
 
 # ───────────────────────────── Fuentes (Manrope) ─────────────────────────────
 font:
@@ -79,6 +88,8 @@ globals:
   - {id: ui_ret_page, type: int, restore_value: false, initial_value: "0"}
   - {id: ui_last_minute, type: int, restore_value: false, initial_value: "-1"}
   - {id: ui_ha_ok, type: bool, restore_value: false, initial_value: "false"}
+  # Idioma de la UI (índice en TR_LANG_NAMES de i18n.h); se guarda.
+  - {id: ui_lang, type: int, restore_value: true, initial_value: "${default_language}"}
 
 # ───────────────────────── Datos de HA comunes (tiempo) ──────────────────────
 text_sensor:
@@ -114,13 +125,12 @@ script:
           const int stamp = t.hour * 60 + t.minute;
           if (stamp == id(ui_last_minute)) return;
           id(ui_last_minute) = stamp;
-          static const char *const days[] = {"", "dom", "lun", "mar", "mié", "jue", "vie", "sáb"};
-          static const char *const months[] = {"", "ene", "feb", "mar", "abr", "may", "jun",
-                                               "jul", "ago", "sep", "oct", "nov", "dic"};
-          char buf[24];
+          char buf[32];
           snprintf(buf, sizeof(buf), "%02d:%02d", t.hour, t.minute);
           lv_label_set_text(id(ui_home_clock), buf);
-          snprintf(buf, sizeof(buf), "%s %d %s", days[t.day_of_week], t.day_of_month, months[t.month]);
+          const int dow = (t.day_of_week >= 1 && t.day_of_week <= 7) ? t.day_of_week - 1 : 0;
+          const int mon = (t.month >= 1 && t.month <= 12) ? t.month - 1 : 0;
+          snprintf(buf, sizeof(buf), "%s %d %s", T(TR_SUN + dow), t.day_of_month, T(TR_JAN + mon));
           lv_label_set_text(id(ui_home_date), buf);
           snprintf(buf, sizeof(buf), "%02d", t.hour);
           lv_label_set_text(id(ui_saver_hh), buf);
@@ -166,15 +176,16 @@ script:
   - id: tpp06_refresh_menu
     then:
       - lambda: |-
-          static const char *const choices[] = {"Nunca", "30 s", "1 min", "2 min", "5 min"};
-          auto pick = [](int c) { return choices[c >= 0 && c <= 4 ? c : 0]; };
+          static const char *const choices[] = {"", "30 s", "1 min", "2 min", "5 min"};
+          auto pick = [](int c) { return (c >= 1 && c <= 4) ? choices[c] : T(TR_NEVER); };
           const int wifi = id(ui_wifi_ok);
-          lv_label_set_text(id(ui_set_wifi_val), wifi == 1 ? "Conectado" : wifi == 0 ? "Sin enlace" : "Desconocido");
+          lv_label_set_text(id(ui_set_wifi_val), T(wifi == 1 ? TR_CONNECTED : wifi == 0 ? TR_NO_LINK : TR_UNKNOWN));
           lv_label_set_text(id(ui_set_bri_val), str_sprintf("%d%%", id(mobile_brightness)).c_str());
           lv_label_set_text(id(ui_set_sleep_val), pick(id(mobile_sleep_choice)));
           lv_label_set_text(id(ui_set_saver_val), pick(id(ui_saver_choice)));
-          lv_label_set_text(id(ui_set_beep_val), id(touch_beep).state ? "Activado" : "Desactivado");
-          lv_label_set_text(id(ui_set_ha_val), id(ui_ha_ok) ? "OK" : "No");
+          lv_label_set_text(id(ui_set_beep_val), T(id(touch_beep).state ? TR_ENABLED : TR_DISABLED));
+          lv_label_set_text(id(ui_set_ha_val), T(id(ui_ha_ok) ? TR_OK : TR_NO));
+          lv_label_set_text(id(ui_set_lang_val), TR_LANG_NAMES[tr_language()]);
           lv_slider_set_value(id(ui_cc_bri), id(mobile_brightness), LV_ANIM_OFF);
           lv_slider_set_value(id(ui_bri_slider), id(mobile_brightness), LV_ANIM_OFF);
           lv_label_set_text(id(ui_bri_pct), str_sprintf("%d%%", id(mobile_brightness)).c_str());
@@ -183,6 +194,29 @@ script:
           lv_obj_set_style_image_recolor(id(ui_cc_night_ic), lv_color_hex(id(ui_night) ? 0x57C891 : 0xB8B8C0), 0);
           lv_obj_set_style_bg_color(id(ui_cc_wifi), lv_color_hex(wifi == 1 ? 0x1E3A30 : 0x16161C), 0);
           lv_obj_set_style_image_recolor(id(ui_cc_wifi_ic), lv_color_hex(wifi == 1 ? 0x57C891 : 0xB8B8C0), 0);
+
+  # Aplica el idioma `ui_lang` a todos los textos fijos. Cada tarjeta añade los
+  # suyos con `- id: !extend ui_apply_language` (y refresca sus estados).
+  - id: ui_apply_language
+    then:
+      - lambda: |-
+          tr_set_language(id(ui_lang));
+          const std::pair<lv_obj_t *, int> labels[] = {
+            {id(ui_t_all_on), TR_ALL_ON}, {id(ui_t_all_off), TR_ALL_OFF},
+            {id(ui_t_night), TR_NIGHT_MODE}, {id(ui_t_cc_wifi), TR_WIFI},
+            {id(ui_t_cc_settings), TR_SETTINGS}, {id(ui_t_cc_scenes), TR_SCENES},
+            {id(ui_t_set_title), TR_SETTINGS}, {id(ui_t_set_wifi), TR_WIFI},
+            {id(ui_t_set_bri), TR_SCREEN_BRIGHTNESS}, {id(ui_t_set_sleep), TR_SCREEN_OFF},
+            {id(ui_t_set_saver), TR_SCREENSAVER}, {id(ui_t_set_sound), TR_SOUND},
+            {id(ui_t_set_lang), TR_LANGUAGE}, {id(ui_t_set_restart), TR_RESTART_PANEL},
+            {id(ui_t_bri_title), TR_SCREEN_BRIGHTNESS}, {id(ui_t_rst_title), TR_RESTART_PANEL},
+            {id(ui_t_rst_text), TR_RESTART_TEXT}, {id(ui_t_rst_ok), TR_RESTART},
+            {id(ui_t_rst_cancel), TR_CANCEL}, {id(ui_t_scn_title), TR_SCENES},
+          };
+          for (const auto &item : labels) lv_label_set_text(item.first, T(item.second));
+          id(ui_last_minute) = -1;   // redibuja la fecha en el nuevo idioma
+      - script.execute: ui_refresh_clock
+      - script.execute: tpp06_refresh_menu
 
   # Cambia el brillo guardado y lo aplica (la capa hw decide cómo).
   - id: ui_set_brightness
@@ -370,7 +404,7 @@ lvgl:
               - homeassistant.action: {action: homeassistant.turn_on, data: {entity_id: "${cc_on_entity}"}}
             widgets:
               - image: {src: img_on, x: 16, y: 14, image_recolor: 0x57C891, image_recolor_opa: COVER}
-              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "Todo encendido", text_font: f15}
+              - label: {id: ui_t_all_on, align: BOTTOM_LEFT, x: 16, y: -14, text: "Todo encendido", text_font: f15}
         - obj:
             x: 168
             y: 120
@@ -383,7 +417,7 @@ lvgl:
               - homeassistant.action: {action: homeassistant.turn_on, data: {entity_id: "${cc_off_entity}"}}
             widgets:
               - image: {src: img_off, x: 16, y: 14, image_recolor: 0xB8B8C0, image_recolor_opa: COVER}
-              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "Todo apagado", text_font: f15}
+              - label: {id: ui_t_all_off, align: BOTTOM_LEFT, x: 16, y: -14, text: "Todo apagado", text_font: f15}
         - obj:
             id: ui_cc_night
             x: 16
@@ -405,7 +439,7 @@ lvgl:
                   }
             widgets:
               - image: {id: ui_cc_night_ic, src: img_menu_setting, x: 16, y: 14, image_recolor: 0xB8B8C0, image_recolor_opa: COVER}
-              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "Modo noche", text_font: f15}
+              - label: {id: ui_t_night, align: BOTTOM_LEFT, x: 16, y: -14, text: "Modo noche", text_font: f15}
         - obj:
             id: ui_cc_wifi
             x: 168
@@ -419,7 +453,7 @@ lvgl:
               - lvgl.page.show: page_settings
             widgets:
               - image: {id: ui_cc_wifi_ic, src: img_network, x: 16, y: 14, image_recolor: 0xB8B8C0, image_recolor_opa: COVER}
-              - label: {align: BOTTOM_LEFT, x: 16, y: -14, text: "WiFi", text_font: f15}
+              - label: {id: ui_t_cc_wifi, align: BOTTOM_LEFT, x: 16, y: -14, text: "WiFi", text_font: f15}
         # Barra inferior: Ajustes | Escenas
         - obj:
             align: TOP_MID
@@ -442,7 +476,7 @@ lvgl:
                     - lvgl.page.show: page_settings
                   widgets:
                     - image: {src: img_menu_setting, align: LEFT_MID, x: 14, zoom: 0.75, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
-                    - label: {align: LEFT_MID, x: 70, text: "Ajustes", text_font: f16}
+                    - label: {id: ui_t_cc_settings, align: LEFT_MID, x: 70, text: "Ajustes", text_font: f16}
               - obj: {align: CENTER, width: 2, height: 40, bg_color: 0x33333A, bg_opa: COVER}
               - obj:
                   x: 145
@@ -455,7 +489,7 @@ lvgl:
                     - lvgl.page.show: page_scenes
                   widgets:
                     - image: {src: img_menu_shortcut, align: LEFT_MID, x: 2, zoom: 0.5, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
-                    - label: {align: LEFT_MID, x: 52, text: "Escenas", text_font: f16}
+                    - label: {id: ui_t_cc_scenes, align: LEFT_MID, x: 52, text: "Escenas", text_font: f16}
 
     # ── AJUSTES ─────────────────────────────────────────────────────────────
     - id: page_settings
@@ -477,7 +511,7 @@ lvgl:
               - lvgl.page.show: page_home
             widgets:
               - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
-        - label: {x: 58, y: 20, text: "Ajustes", text_font: f22}
+        - label: {id: ui_t_set_title, x: 58, y: 20, text: "Ajustes", text_font: f22}
         # 1 · WiFi
         - obj:
             styles: tuya_row
@@ -487,7 +521,7 @@ lvgl:
             height: 58
             widgets:
               - image: {src: img_network, align: LEFT_MID, x: 20}
-              - label: {align: LEFT_MID, x: 70, text: "WiFi", text_font: f17}
+              - label: {id: ui_t_set_wifi, align: LEFT_MID, x: 70, text: "WiFi", text_font: f17}
               - label: {id: ui_set_wifi_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
               - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
         # 2 · Brillo de pantalla
@@ -501,7 +535,7 @@ lvgl:
               - lvgl.page.show: page_brightness
             widgets:
               - image: {src: img_brightness, align: LEFT_MID, x: 17}
-              - label: {align: LEFT_MID, x: 70, text: "Brillo de pantalla", text_font: f17}
+              - label: {id: ui_t_set_bri, align: LEFT_MID, x: 70, text: "Brillo de pantalla", text_font: f17}
               - label: {id: ui_set_bri_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
               - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
         # 3 · Reposo de pantalla (pantalla apagada)
@@ -517,7 +551,7 @@ lvgl:
               - script.execute: tpp06_refresh_menu
             widgets:
               - image: {src: img_display, align: LEFT_MID, x: 20}
-              - label: {align: LEFT_MID, x: 70, text: "Apagar pantalla", text_font: f17}
+              - label: {id: ui_t_set_sleep, align: LEFT_MID, x: 70, text: "Apagar pantalla", text_font: f17}
               - label: {id: ui_set_sleep_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
               - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
         # 4 · Salvapantallas
@@ -533,7 +567,7 @@ lvgl:
               - script.execute: tpp06_refresh_menu
             widgets:
               - image: {src: img_date_time, align: LEFT_MID, x: 20}
-              - label: {align: LEFT_MID, x: 70, text: "Salvapantallas", text_font: f17}
+              - label: {id: ui_t_set_saver, align: LEFT_MID, x: 70, text: "Salvapantallas", text_font: f17}
               - label: {id: ui_set_saver_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
               - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
         # 5 · Sonido al tocar
@@ -557,14 +591,38 @@ lvgl:
                   bg_opa: COVER
                   widgets:
                     - image: {src: img_volume, align: CENTER, zoom: 0.8, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
-              - label: {align: LEFT_MID, x: 70, text: "Sonido", text_font: f17}
+              - label: {id: ui_t_set_sound, align: LEFT_MID, x: 70, text: "Sonido", text_font: f17}
               - label: {id: ui_set_beep_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
               - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
-        # 6 · Home Assistant
+        # 6 · Idioma
         - obj:
             styles: tuya_row
             x: 16
             y: 408
+            width: 288
+            height: 58
+            on_click:
+              - lambda: id(ui_lang) = (id(ui_lang) + 1) % TR_LANG_COUNT;
+              - script.execute: ui_apply_language
+            widgets:
+              - obj:
+                  align: LEFT_MID
+                  x: 20
+                  width: 36
+                  height: 36
+                  radius: 18
+                  bg_color: 0x5A8DEE
+                  bg_opa: COVER
+                  widgets:
+                    - label: {align: CENTER, text: "Aa", text_font: f15}
+              - label: {id: ui_t_set_lang, align: LEFT_MID, x: 70, text: "Idioma", text_font: f17}
+              - label: {id: ui_set_lang_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
+              - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
+        # 7 · Home Assistant
+        - obj:
+            styles: tuya_row
+            x: 16
+            y: 474
             width: 288
             height: 58
             widgets:
@@ -572,20 +630,20 @@ lvgl:
               - label: {align: LEFT_MID, x: 70, text: "Home Assistant", text_font: f17}
               - label: {id: ui_set_ha_val, align: RIGHT_MID, x: -40, text: "", text_font: f15, text_color: 0x8A8A95}
               - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
-        # 7 · Reiniciar panel
+        # 8 · Reiniciar panel
         - obj:
             styles: tuya_row
             x: 16
-            y: 474
+            y: 540
             width: 288
             height: 58
             on_click:
               - lvgl.page.show: page_restart
             widgets:
               - image: {src: img_dev_info, align: LEFT_MID, x: 20}
-              - label: {align: LEFT_MID, x: 70, text: "Reiniciar panel", text_font: f17}
+              - label: {id: ui_t_set_restart, align: LEFT_MID, x: 70, text: "Reiniciar panel", text_font: f17}
               - image: {src: img_right, align: RIGHT_MID, x: -18, image_recolor: 0x6A6A72, image_recolor_opa: COVER}
-        - obj: {x: 0, y: 532, width: 10, height: 16, bg_opa: TRANSP}   # margen inferior de scroll
+        - obj: {x: 0, y: 598, width: 10, height: 16, bg_opa: TRANSP}   # margen inferior de scroll
 
     # ── BRILLO DE PANTALLA (barra vertical estilo detalle de luz) ───────────
     - id: page_brightness
@@ -604,7 +662,7 @@ lvgl:
               - lvgl.page.show: page_settings
             widgets:
               - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
-        - label: {x: 58, y: 22, text: "Brillo de pantalla", text_font: f20}
+        - label: {id: ui_t_bri_title, x: 58, y: 22, text: "Brillo de pantalla", text_font: f20}
         - slider:
             id: ui_bri_slider
             x: 100
@@ -640,13 +698,14 @@ lvgl:
               - lvgl.page.show: page_settings
             widgets:
               - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
-        - label: {x: 58, y: 22, text: "Reiniciar panel", text_font: f20}
+        - label: {id: ui_t_rst_title, x: 58, y: 22, text: "Reiniciar panel", text_font: f20}
         - label:
             align: TOP_MID
             y: 150
             width: 260
             text_align: CENTER
             long_mode: WRAP
+            id: ui_t_rst_text
             text: "Se reiniciará la aplicación del panel. Tarda unos segundos y no cambia los relés."
             text_font: f17
             text_color: 0xB8B8C0
@@ -659,7 +718,7 @@ lvgl:
             on_click:
               - script.execute: ui_hw_restart
             widgets:
-              - label: {align: CENTER, text: "Reiniciar", text_font: f20, text_color: 0xF0B24F}
+              - label: {id: ui_t_rst_ok, align: CENTER, text: "Reiniciar", text_font: f20, text_color: 0xF0B24F}
         - obj:
             styles: tuya_dark_btn
             align: TOP_MID
@@ -669,7 +728,7 @@ lvgl:
             on_click:
               - lvgl.page.show: page_settings
             widgets:
-              - label: {align: CENTER, text: "Cancelar", text_font: f20, text_color: 0x57C891}
+              - label: {id: ui_t_rst_cancel, align: CENTER, text: "Cancelar", text_font: f20, text_color: 0x57C891}
 
     # ── ESCENAS (las tarjetas las añade cards/scene.yaml) ───────────────────
     - id: page_scenes
@@ -699,7 +758,7 @@ lvgl:
               - lvgl.page.show: page_home
             widgets:
               - image: {src: img_left, align: CENTER, image_recolor: 0xFFFFFF, image_recolor_opa: COVER}
-        - label: {ignore_layout: true, x: 42, y: -58, text: "Escenas", text_font: f22}
+        - label: {id: ui_t_scn_title, ignore_layout: true, x: 42, y: -58, text: "Escenas", text_font: f22}
 
     # ── SALVAPANTALLAS screen_saver_1 (flip-clock, 1:1) ─────────────────────
     - id: page_saver

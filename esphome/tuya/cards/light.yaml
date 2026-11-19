@@ -24,6 +24,10 @@ sensor:
       - script.execute: ${uid}_refresh
 
 script:
+  - id: !extend ui_apply_language
+    then:
+      - lvgl.label.update: {id: "${uid}_t_bri", text: !lambda return std::string(T(TR_BRIGHTNESS));}
+      - script.execute: ${uid}_refresh
   - id: "${uid}_refresh"
     then:
       - lambda: |-
@@ -31,8 +35,8 @@ script:
           const bool on = s == "on";
           const float raw = id(${uid}_bri).state;
           const int pct = on ? (std::isnan(raw) ? 100 : std::max(1, (int) lroundf(raw * 100.0f / 255.0f))) : 0;
-          const char *txt = s == "on" ? "Encendida" : s == "off" ? "Apagada" :
-                            s.empty() ? "--" : "No disponible";
+          const char *txt = s == "on" ? T(TR_ON_F) : s == "off" ? T(TR_OFF_F) :
+                            s.empty() ? "--" : T(TR_UNAVAILABLE);
           const auto green = lv_color_hex(0x9AE6C0), grey = lv_color_hex(0x8A8A95);
           // Tarjeta
           lv_label_set_text(id(${uid}_sub), txt);
@@ -134,4 +138,4 @@ lvgl:
             on_click:
               - homeassistant.action: {action: light.toggle, data: {entity_id: "${entity}"}}
         - label: {id: "${uid}_dstate", x: 40, y: 220, text: "--", text_font: f18, text_color: 0x8A8A95}
-        - label: {x: 40, y: 258, text: "Brillo", text_font: f15, text_color: 0x6A6A72}
+        - label: {id: "${uid}_t_bri", x: 40, y: 258, text: "Brillo", text_font: f15, text_color: 0x6A6A72}

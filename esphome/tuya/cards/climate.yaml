@@ -41,20 +41,23 @@ sensor:
       - script.execute: ${uid}_refresh
 
 script:
+  - id: !extend ui_apply_language
+    then:
+      - script.execute: ${uid}_refresh
   - id: "${uid}_refresh"
     then:
       - lambda: |-
           const std::string &m = id(${uid}_mode).state;
           bool active = true;
           const char *mode;
-          if (m == "heat") mode = "Calefacción";
-          else if (m == "cool") mode = "Refrigeración";
-          else if (m == "heat_cool" || m == "auto") mode = "Automático";
-          else if (m == "dry") mode = "Deshumidificar";
-          else if (m == "fan_only") mode = "Ventilador";
+          if (m == "heat") mode = T(TR_MODE_HEAT);
+          else if (m == "cool") mode = T(TR_MODE_COOL);
+          else if (m == "heat_cool" || m == "auto") mode = T(TR_MODE_AUTO);
+          else if (m == "dry") mode = T(TR_MODE_DRY);
+          else if (m == "fan_only") mode = T(TR_MODE_FAN);
           else {
             active = false;
-            mode = m == "off" ? "Apagado" : m.empty() ? "--" : "No disponible";
+            mode = m == "off" ? T(TR_MODE_OFF) : m.empty() ? "--" : T(TR_UNAVAILABLE);
           }
           // Entero si es .0; si no, un decimal.
           auto fmt = [](float v) -> std::string {
@@ -76,7 +79,7 @@ script:
           lv_label_set_text(id(${uid}_dmode), mode);
           lv_obj_set_style_text_color(id(${uid}_dmode), lv_color_hex(active ? 0x57C891 : 0x8A8A95), 0);
           lv_label_set_text(id(${uid}_dcur),
-                            str_sprintf("Actual: %s °C", fmt(id(${uid}_current).state).c_str()).c_str());
+                            str_sprintf("%s: %s °C", T(TR_CURRENT), fmt(id(${uid}_current).state).c_str()).c_str());
 
   # −/+ : ajusta la consigna mostrada y programa el envío.
   - id: "${uid}_step"

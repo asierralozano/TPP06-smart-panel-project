@@ -85,6 +85,9 @@ globals:
   - {id: "${uid}_pos_epoch", type: int64_t, restore_value: false, initial_value: "0"}
 
 script:
+  - id: !extend ui_apply_language
+    then:
+      - script.execute: ${uid}_refresh
   - id: "${uid}_refresh"
     then:
       - lambda: |-
@@ -95,10 +98,10 @@ script:
           const bool active = playing || s == "paused" || s == "buffering";
           std::string title = active ? id(${uid}_mtitle).state : "";
           std::string artist = active ? id(${uid}_martist).state : "";
-          if (title.empty()) title = playing ? "Reproduciendo" : "Sin reproducción";
+          if (title.empty()) title = T(playing ? TR_PLAYING : TR_NOTHING_PLAYING);
           if (artist.empty())
-            artist = s == "unavailable" ? "No disponible" :
-                     (s == "off" || s == "standby") ? "Apagado" : "${name}";
+            artist = s == "unavailable" ? T(TR_UNAVAILABLE) :
+                     (s == "off" || s == "standby") ? T(TR_OFF_M) : "${name}";
           const char *icon = playing ? LV_SYMBOL_PAUSE : LV_SYMBOL_PLAY;
           // Tarjeta: botón relleno verde si reproduce; transparente si no.
           lv_label_set_text(id(${uid}_title), title.c_str());

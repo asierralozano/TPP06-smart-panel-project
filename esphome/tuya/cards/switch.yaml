@@ -12,16 +12,25 @@ text_sensor:
     entity_id: ${entity}
     internal: true
     on_value:
+      - script.execute: ${uid}_refresh
+
+script:
+  - id: !extend ui_apply_language
+    then:
+      - script.execute: ${uid}_refresh
+  - id: "${uid}_refresh"
+    then:
       - lvgl.label.update:
           id: "${uid}_sub"
           text: !lambda |-
-            if (x == "on") return std::string("Encendido");
-            if (x == "off") return std::string("Apagado");
-            return std::string(x.empty() ? "--" : "No disponible");
-          text_color: !lambda 'return lv_color_hex(x == "on" ? 0x9AE6C0 : 0x8A8A95);'
+            const std::string &x = id(${uid}_state).state;
+            if (x == "on") return std::string(T(TR_ON_M));
+            if (x == "off") return std::string(T(TR_OFF_M));
+            return std::string(x.empty() ? "--" : T(TR_UNAVAILABLE));
+          text_color: !lambda 'return lv_color_hex(id(${uid}_state).state == "on" ? 0x9AE6C0 : 0x8A8A95);'
       - lvgl.image.update:
           id: "${uid}_btn"
-          src: !lambda 'return x == "on" ? id(img_on) : id(img_off);'
+          src: !lambda 'return id(${uid}_state).state == "on" ? id(img_on) : id(img_off);'
 
 lvgl:
   pages:

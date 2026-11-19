@@ -8,6 +8,8 @@
 substitutions:
   device_name: tpp06-tuya-preview
   assets_dir: ../../tuya-assets
+  tuya_dir: ".."
+  default_language: "0"
   preview_api_port: "6053"
   weather_entity: weather.demo
   cc_on_entity: scene.demo_todo_encendido
@@ -137,5 +139,36 @@ script:
       - lvgl.page.show: page_saver
       - delay: 400ms
       - snapshot.take: {id: tpp06_display, filename: screensaver.bmp}
+      # Segunda pasada en inglés (idioma cambiado en caliente, como desde Ajustes).
+      - lambda: |-
+          id(ui_lang) = 1;
+          id(ui_apply_language).execute();
+      - lvgl.page.show: page_home
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_home.bmp}
+      - lvgl.page.show: page_cocina
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_devices_mix.bmp}
+      - lvgl.page.show: page_dormitorio
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_room_dormitorio.bmp}
+      - lvgl.page.show: page_settings
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_settings.bmp}
+      - lvgl.page.show: page_control
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_control_center.bmp}
+      - lvgl.page.show: page_persiana_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_cover_detail.bmp}
+      - lvgl.page.show: page_termo_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_thermostat_detail.bmp}
+      - lvgl.page.show: page_musica_detail
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_media_detail.bmp}
+      - lvgl.page.show: page_restart
+      - delay: 400ms
+      - snapshot.take: {id: tpp06_display, filename: en_restart.bmp}
       - delay: 300ms
       - lambda: exit(0);

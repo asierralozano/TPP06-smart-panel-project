@@ -27,6 +27,12 @@ sensor:
       - script.execute: ${uid}_refresh
 
 script:
+  - id: !extend ui_apply_language
+    then:
+      - lvgl.label.update: {id: "${uid}_t_open", text: !lambda return std::string(T(TR_OPEN));}
+      - lvgl.label.update: {id: "${uid}_t_stop", text: !lambda return std::string(T(TR_STOP));}
+      - lvgl.label.update: {id: "${uid}_t_close", text: !lambda return std::string(T(TR_CLOSE));}
+      - script.execute: ${uid}_refresh
   - id: "${uid}_refresh"
     then:
       - lambda: |-
@@ -36,14 +42,14 @@ script:
           const bool has_pos = known && !std::isnan(raw);
           const int pos = has_pos ? std::max(0, std::min(100, (int) lroundf(raw))) : 0;
           const bool active = s == "open" || s == "opening";
-          const char *txt = s == "open" ? "Abierta" : s == "closed" ? "Cerrada" :
-                            s == "opening" ? "Abriendo…" : s == "closing" ? "Cerrando…" :
-                            s.empty() ? "--" : "No disponible";
+          const char *txt = s == "open" ? T(TR_COVER_OPEN) : s == "closed" ? T(TR_COVER_CLOSED) :
+                            s == "opening" ? T(TR_COVER_OPENING) : s == "closing" ? T(TR_COVER_CLOSING) :
+                            s.empty() ? "--" : T(TR_UNAVAILABLE);
           const int bar = has_pos ? pos : (active ? 100 : 0);
           const auto green = lv_color_hex(0x9AE6C0), grey = lv_color_hex(0x8A8A95);
           // Tarjeta
           if (s == "open" && has_pos)
-            lv_label_set_text(id(${uid}_sub), str_sprintf("Abierta %d%%", pos).c_str());
+            lv_label_set_text(id(${uid}_sub), str_sprintf("%s %d%%", T(TR_COVER_OPEN), pos).c_str());
           else
             lv_label_set_text(id(${uid}_sub), txt);
           lv_obj_set_style_text_color(id(${uid}_sub), active ? green : grey, 0);
@@ -117,7 +123,7 @@ lvgl:
             on_click:
               - homeassistant.action: {action: cover.open_cover, data: {entity_id: "${entity}"}}
             widgets:
-              - label: {align: CENTER, text: "Abrir", text_font: f20, text_color: 0x6F7BFF}
+              - label: {id: "${uid}_t_open", align: CENTER, text: "Abrir", text_font: f20, text_color: 0x6F7BFF}
         - obj:
             styles: tuya_dark_btn
             align: TOP_MID
@@ -128,7 +134,7 @@ lvgl:
             on_click:
               - homeassistant.action: {action: cover.stop_cover, data: {entity_id: "${entity}"}}
             widgets:
-              - label: {align: CENTER, text: "Parar", text_font: f20, text_color: 0xF0B24F}
+              - label: {id: "${uid}_t_stop", align: CENTER, text: "Parar", text_font: f20, text_color: 0xF0B24F}
         - obj:
             styles: tuya_dark_btn
             align: TOP_MID
@@ -139,4 +145,4 @@ lvgl:
             on_click:
               - homeassistant.action: {action: cover.close_cover, data: {entity_id: "${entity}"}}
             widgets:
-              - label: {align: CENTER, text: "Cerrar", text_font: f20, text_color: 0x57C891}
+              - label: {id: "${uid}_t_close", align: CENTER, text: "Cerrar", text_font: f20, text_color: 0x57C891}
