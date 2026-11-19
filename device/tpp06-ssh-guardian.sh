@@ -326,7 +326,15 @@ ssh_tick() {
     [ "$now" -ge "$db_next_try" ] || return 0
     ensure_host_key || return 0
 
-    set -- -F -E -p "0.0.0.0:$SSH_PORT" -r "$HOST_KEY" -P "$DROPBEAR_PID_FILE" \
+    # -E (log a stderr) no existe en todos los builds de dropbear: algunos abortan
+    # con "Invalid option -E". Usarlo solo si el binario lo acepta.
+    db_logopt=
+    if [ "$DB_MULTI" = yes ]; then
+        "$DB_BIN" dropbear -E -V >/dev/null 2>&1 && db_logopt=-E
+    else
+        "$DB_BIN" -E -V >/dev/null 2>&1 && db_logopt=-E
+    fi
+    set -- -F $db_logopt -p "0.0.0.0:$SSH_PORT" -r "$HOST_KEY" -P "$DROPBEAR_PID_FILE" \
         -D "$BASE" -K 60
     # Solo clave por defecto; contraseña únicamente con $BASE/allow_password.
     [ "$auth" = keys ] && set -- "$@" -s -g

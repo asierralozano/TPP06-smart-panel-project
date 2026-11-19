@@ -57,6 +57,10 @@ start() {
 			sleep 2
 		done
 	) &
+	# Guardián SSH (dropbear por red), independiente de Tuya. Su ausencia o fallo
+	# nunca afecta al ADB-USB. El guardián se auto-supervisa (ignora SIGHUP).
+	[ -x /data/tpp06-ssh/tpp06-ssh-guardian.sh ] && \
+		sh /data/tpp06-ssh/tpp06-ssh-guardian.sh start >/dev/null 2>&1
 }
 
 stop() {
