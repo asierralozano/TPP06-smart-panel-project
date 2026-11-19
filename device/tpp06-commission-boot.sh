@@ -18,6 +18,12 @@ case "$1" in
     stop|status) exec "$ROOT/supervisor.sh" "$@" ;;
     *) echo 'Usage: S99tuya-app {start|stop|status}'; exit 1 ;;
 esac
+# Optional SSH rescue guardian (docs/es/21-ssh-rescate.md), background only:
+# its absence or failure never alters the one-trial gate below.
+SSH_GUARDIAN=${TPP06_SSH_GUARDIAN:-/data/tpp06-ssh/tpp06-ssh-guardian.sh}
+if [ -f "$SSH_GUARDIAN" ] && [ -x "$SSH_GUARDIAN" ]; then
+    "$SSH_GUARDIAN" start </dev/null >/dev/null 2>&1 &
+fi
 if [ -s "$ROOT/committed" ] &&
    [ "$(cat "$ROOT/committed")" = "$(cat "$ROOT/trial-boot")" ] &&
    [ "$(cat "$BASE/persistent_confirmed")" = yes ]; then

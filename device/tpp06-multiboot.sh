@@ -25,6 +25,7 @@ DHCP_PID_FILE=$BASE/udhcpc.pid
 LOG_DIR=$BASE/diagnostics
 LOG_FILE=$LOG_DIR/multiboot.log
 HEARTBEAT_FILE=${TPP06_HEARTBEAT_FILE:-/tmp/tpp06-health/heartbeat}
+SSH_GUARDIAN=${TPP06_SSH_GUARDIAN:-/data/tpp06-ssh/tpp06-ssh-guardian.sh}
 
 # Optional Wi-Fi editor: firmware OTA alone cannot change the boot/network policy.
 wifi_edit_in_progress() { return 1; }
@@ -646,8 +647,17 @@ supervisor_is_running() {
     kill -0 "$old_pid" 2>/dev/null
 }
 
+start_ssh_guardian() {
+    # Optional, independent SSH rescue guardian (docs/es/21-ssh-rescate.md).
+    # Background only: its absence, failure or delay never changes this boot.
+    [ -f "$SSH_GUARDIAN" ] && [ -x "$SSH_GUARDIAN" ] || return 0
+    "$SSH_GUARDIAN" start </dev/null >/dev/null 2>&1 &
+    return 0
+}
+
 case "$1" in
     start)
+        start_ssh_guardian
         if supervisor_is_running; then
             log "supervisor already running pid=$old_pid"
             exit 0
