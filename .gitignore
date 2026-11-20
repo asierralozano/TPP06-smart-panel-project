@@ -36,3 +36,7 @@ api-key.txt
 
 # Tuya UI: assets extraidos del firmware de Tuya (copyright de terceros, nunca a git)
 esphome/tuya-assets/
+
+# Aprovisionador: estado de progreso por panel y configs reales (pueden llevar rutas/identidad)
+installer/state/
+installer/panel-*.conf

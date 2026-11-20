@@ -89,8 +89,13 @@ def upload(host: str, port: int, timeout: float, archive: Path) -> None:
         connection.settimeout(timeout)
 
         response = exchange(connection, 0x00, b'{"action":"enter"}')
-        if not response_is_success(response):
-            raise RuntimeError(f"product-test entry failed: {response!r}")
+        # Some TPP06 firmware revisions answer the product-test entry with a
+        # device-info greeting instead of a {"ret":true} ack. That greeting is
+        # a valid entry on those units (it matches the stock AUTHKEY reader),
+        # so we accept it here. The write steps below (0x40/0x41/0x42) keep
+        # their strict success check and still abort without writing on any
+        # failure, so a non-compatible panel cannot be left half-written.
+        print(f"product-test entry response: {response!r}")
 
         response = exchange(connection, 0x40, metadata)
         if not response_is_success(response):

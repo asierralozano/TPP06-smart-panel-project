@@ -1,0 +1,22 @@
+# Plantilla de configuración por panel.
+# Copia este fichero a  panel-<nombre>.conf  y rellénalo. Los .conf reales NO van a git
+# (pueden contener rutas/identidad del panel); solo este .example se versiona.
+
+[panel]
+name       = salon                 ; nombre corto (identifica backups y estado)
+host       = 192.168.18.50         ; IP del panel con Tuya en marcha (8090 accesible)
+adb        = adb                   ; comando adb (o ruta absoluta)
+usb_serial =                       ; opcional: serial USB para rescate por cable
+backup_dir = ~/Documents/tpp06-backups
+
+[ssh]
+key    = ~/.ssh/tpp06_ed25519      ; clave privada para entrar por SSH (dropbear)
+pubkey = ~/.ssh/tpp06_ed25519.pub  ; su pública: se autoriza en el panel
+
+[ui]
+# Binario ESPHome de ESTE panel, compilado en Home Assistant (cada panel el suyo:
+# distinto nombre de nodo/clave de API). NO se versiona. Déjalo vacío para preparar
+# el rescate sin armar todavía la UI.
+program   =
+clock_url = http://192.168.18.77:8123/   ; de dónde saca la hora (cabecera HTTP Date)
+timezone  = Europe/Madrid                ; informativo; la zona la aplica ESPHome
