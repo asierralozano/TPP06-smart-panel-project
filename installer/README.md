@@ -87,7 +87,14 @@ Comandos útiles:
 
 ## Estado
 
-v1: construido sobre las piezas ya validadas en el panel de referencia, pero el recorrido
-completo sobre un panel **de fábrica** aún no se ha ejecutado de principio a fin. Las fases
-usan transferencia byte-exacta y verificación md5; si alguna falla en un panel real, el
-estado queda guardado y se reanuda tras corregir.
+**Validado en un panel de fábrica hasta la Fase 5** (2026-11-20, panel `izq-hab-principal`,
+192.168.18.127): discover → enable_adb → backup (NAND factory/env + overlay) → harden →
+verify_access funcionaron de principio a fin. Tras el 2º power-cycle: SSH por clave entra
+como root en frío, el rescate arranca a los ~2 s del boot (independiente de Tuya), y el ADB
+pasa a solo-USB mientras el SSH por WiFi persiste. El parche del `enter` fue necesario (el
+panel saluda con device-info en el product-test) y funcionó.
+
+Pendiente de validar: **Fase 6 `install_ui`** (necesita el binario ESPHome compilado para
+ese panel, con su propio nombre de nodo) y la Fase 7. Las fases usan transferencia
+byte-exacta y verificación md5; si alguna falla en un panel real, el estado queda guardado
+y se reanuda tras corregir.
